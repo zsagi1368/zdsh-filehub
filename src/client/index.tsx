@@ -23,6 +23,9 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the ui-conversation SlotMap merge (conversation.input.*).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 
+// M2 mention pipeline (P01 §6-B): @ trigger source + chip reference bar.
+import { FileHubChips } from './mention/chips.js'
+import { registerMentionTrigger } from './mention/source.js'
 import { FileHubDock } from './upload/dock.js'
 import { resolveSessionId, UploadEntries } from './upload/entries.js'
 import { UploadQueue } from './upload/queue.js'
@@ -84,6 +87,29 @@ function apply(ctx: ClientContext): void {
         inject: (): FileHubInjectFace => ({ queue }),
       },
       FileHubDock,
+    ),
+  )
+
+  // ---- M2 mention pipeline (P01 §6-B) --------------------------------------
+  // `@` trigger source: candidates from /api/filehub/search (debounced),
+  // picks insert a plain-text @token aligned with the host grammar. Skips
+  // registration entirely when the feature toggle is off or the
+  // inputTriggers service is absent — degrade, never throw.
+  registerMentionTrigger(ctx, { sessionId: () => resolveSessionId() })
+
+  // Chip reference bar: second entry in the SAME dock slot (the slot is
+  // declared kind:'list', so multiple injectors are allowed). Chips parse the
+  // live draft's @tokens via the framework useInput standard kit.
+  ctx.slots.inject('conversation.input.dock', () =>
+    ctx.slots.register(
+      {
+        name: 'conversation.input.dock',
+        id: 'zdsh-filehub-mention-chips',
+        order: 21,
+        registrant: 'zdsh-filehub',
+        inject: (): FileHubInjectFace => ({ queue }),
+      },
+      FileHubChips,
     ),
   )
 }

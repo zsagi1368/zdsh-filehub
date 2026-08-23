@@ -19,14 +19,23 @@ import { createLifecycle } from './server/lifecycle.js'
 import { createListHandler } from './server/list.js'
 import { createMemoryMetaStore, createMetaStore } from './server/meta.js'
 import type { StorageHubLike } from './server/meta.js'
+import { createMentionInjector, createSearchHandler } from './server/mention.js'
+import type { HostEventsLike } from './server/mention.js'
 import { createUploadHandler } from './server/upload.js'
 import type { HttpHandler } from './server/upload.js'
 import { DEFAULT_DANGEROUS_EXTENSIONS } from './server/guards.js'
-import { createWorkspaceResolver } from './server/workspace.js'
-import type { SessionsLike } from './server/workspace.js'
+import { createWorkspaceIndexer, createWorkspaceResolver } from './server/workspace.js'
+import type { SessionsLike, WorkspaceIndexer } from './server/workspace.js'
+import { ParseCache } from './server/parse/cache.js'
+import { registerReadingTools } from './server/tools.js'
+import type { ReadingBudgets, SystemPromptRegistryLike, ToolsRegistryLike } from './server/tools.js'
 
 export { sniff } from './detect.js'
 export type { SniffKind, SniffResult } from './detect.js'
+
+// M3 re-exports (additive).
+export { registerReadingTools, ParseCache }
+export type { ReadingBudgets, SystemPromptRegistryLike, ToolsRegistryLike }
 
 /** Extension deny list served as the default value of `upload.dangerousExtensions`. */
 export { DEFAULT_DANGEROUS_EXTENSIONS }
@@ -49,11 +58,33 @@ export interface LifecycleDomainConfig {
   sweepIntervalMs: number
 }
 
+/** M2 mention pipeline knobs (P01 §6-B). */
+export interface MentionDomainConfig {
+  /** Hard entry ceiling of one workspace walk. Default 5000. */
+  indexMaxFiles: number
+  /** Fallback freshness window for the index cache. Default 30 s. */
+  indexTtlMs: number
+  /** Search response page cap. Default 50. */
+  searchLimit: number
+}
+
 export interface FileHubConfig {
   /** Session-workspace subdirectory name created under the session cwd. */
   storageDirName: string
   upload: UploadDomainConfig
   lifecycle: LifecycleDomainConfig
+  /** M2 mention domain; defaults apply when omitted (additive, M1-safe). */
+  mention?: Partial<MentionDomainConfig>
+  /**
+   * M3 document-reading domain; defaults apply when omitted (additive,
+   * M1/M2-safe). `budgets` overrides per-format character budgets,
+   * `cacheEntries`/`cacheBytes` the parse-cache LRU bounds.
+   */
+  reading?: {
+    budgets?: Partial<ReadingBudgets>
+    cacheEntries?: number
+    cacheBytes?: number
+  }
 }
 
 const MIB = 1024 * 1024
@@ -69,12 +100,18 @@ export const filehubConfigDefaults: FileHubConfig = {
     ttlMs: 7 * 24 * 60 * 60 * 1000,
     sweepIntervalMs: 60 * 60 * 1000,
   },
+  mention: {
+    indexMaxFiles: 5000,
+    indexTtlMs: 30_000,
+    searchLimit: 50,
+  },
 }
 
-/** Deep-enough merge for the two nested config groups. */
+/** Deep-enough merge for the nested config groups. */
 function resolveConfig(overrides?: Partial<FileHubConfig>): FileHubConfig & {
   upload: Required<Omit<UploadDomainConfig, 'dangerousExtensions'>> &
     Pick<UploadDomainConfig, 'dangerousExtensions'>
+  mention: MentionDomainConfig
 } {
   return {
     storageDirName: overrides?.storageDirName ?? filehubConfigDefaults.storageDirName,
@@ -86,6 +123,10 @@ function resolveConfig(overrides?: Partial<FileHubConfig>): FileHubConfig & {
       ...filehubConfigDefaults.lifecycle,
       ...overrides?.lifecycle,
     },
+    mention: {
+      ...filehubConfigDefaults.mention,
+      ...overrides?.mention,
+    } as MentionDomainConfig,
   }
 }
 
@@ -115,6 +156,27 @@ export interface HostContext {
   readonly sessions?: SessionsLike
   readonly webServer?: WebServerLike
   readonly storage?: StorageHubLike
+  /**
+   * M2: the host cordis event face (`ctx.on(...)`), used for the
+   * fs-invalidation listeners and the agent/pre-step injection. Optional so a
+   * bare context still loads; without it the mention pipeline degrades to the
+   * index TTL fallback and no send-time references are injected.
+   */
+  readonly events?: HostEventsLike
+  /**
+   * M3: host tool registry face (`ctx.tools.register(definition)`). The
+   * definition objects FileHub registers mirror the verified
+   * @deepseek-ai/dsh-tools DefineToolOptions contract field-for-field (see
+   * src/server/tools.ts header note). Optional: without it the reading tools
+   * are simply not registered.
+   */
+  readonly tools?: ToolsRegistryLike
+  /**
+   * M3: system-prompt registry face (`ctx.systemPrompt.section(...)`),
+   * mirroring the verified dsh-system-prompt PromptSection signature.
+   * Optional; absent = no guidance section is contributed.
+   */
+  readonly systemPrompt?: SystemPromptRegistryLike
 }
 
 /** Host services required by the full feature set (finalized per domain). */
@@ -153,6 +215,80 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   // in-memory otherwise (createMetaStore decides; it warns through logWarn).
   const meta =
     ctx.storage !== undefined ? createMetaStore(ctx.storage, logWarn) : createMemoryMetaStore()
+
+  // ---- M2 mention pipeline: bounded index + invalidation + search ----------
+  const indexer: WorkspaceIndexer = createWorkspaceIndexer({
+    sessions: ctx.sessions,
+    storageDirName: resolved.storageDirName,
+    logWarn,
+    maxFiles: resolved.mention.indexMaxFiles,
+    ttlMs: resolved.mention.indexTtlMs,
+  })
+  // Event-driven invalidation (FR-B2). Verified event names and payload shape:
+  // `fs/write-intent` / `fs/edit-intent` are waterfall events carrying
+  // (target: FsTarget {targetKey, displayPath}, actor) — see
+  // Fork/packages/fs/fs-observation-policy/src/index.ts:119-122 and
+  // Fork/packages/fs/fs/src/types.ts:60-68. They fire on TOOL-mediated writes
+  // only; edits made outside the tool pipeline surface through the TTL
+  // fallback inside createWorkspaceIndexer instead.
+  const eventDisposers: Array<() => void> = []
+  if (ctx.events !== undefined) {
+    for (const eventName of ['fs/write-intent', 'fs/edit-intent'] as const) {
+      try {
+        eventDisposers.push(ctx.events.on(eventName, () => indexer.invalidateAll()))
+      } catch (error: unknown) {
+        logWarn(`[filehub] could not subscribe ${eventName}: ${String(error)}`)
+      }
+    }
+  } else {
+    logWarn('[filehub] host events unavailable; workspace index falls back to TTL refresh only')
+  }
+
+  const searchHandler = createSearchHandler({
+    indexer,
+    meta,
+    workspaces,
+    limit: resolved.mention.searchLimit,
+  })
+
+  // Send-time existence validation + structured injection (FR-B3/B4). The
+  // listener wraps next() on the agent/pre-step waterfall; without the events
+  // face there is no injection seam and the feature stays off (degrades loud).
+  let detachInjector: (() => void) | undefined
+  if (ctx.events !== undefined) {
+    try {
+      detachInjector = createMentionInjector({ logWarn }).attach(ctx.events)
+    } catch (error: unknown) {
+      logWarn(`[filehub] agent/pre-step registration failed: ${String(error)}`)
+    }
+  }
+
+  // ---- M3 document reading: tools + prompt section -------------------------
+  // Registered only when BOTH host faces exist; otherwise the domain keeps
+  // loading and the reading capability degrades loudly (FR-C5 seam contract).
+  const toolDisposers: Array<() => void> = []
+  if (ctx.tools !== undefined && ctx.systemPrompt !== undefined) {
+    try {
+      const cache = new ParseCache({
+        maxEntries: resolved.reading?.cacheEntries,
+        maxBytes: resolved.reading?.cacheBytes,
+      })
+      toolDisposers.push(
+        ...registerReadingTools({
+          tools: ctx.tools,
+          systemPrompt: ctx.systemPrompt,
+          logWarn,
+          storageDirName: resolved.storageDirName,
+          cache,
+          budgets: resolved.reading?.budgets,
+        }),
+      )
+    } catch (error: unknown) {
+      logWarn(`[filehub] reading tools registration failed: ${String(error)}`)
+    }
+  } else {
+    logWarn('[filehub] tools/systemPrompt services unavailable; document-reading tools not registered')
+  }
 
   const uploadHandler = createUploadHandler({
     guards: {
@@ -210,6 +346,11 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
       sendError(res, 405, 'method not allowed')
       return
     }
+    if (pathname === '/api/filehub/search') {
+      if (req.method === 'GET') return run(searchHandler)
+      sendError(res, 405, 'method not allowed')
+      return
+    }
     sendError(res, 404, 'unknown filehub endpoint')
   }
 
@@ -230,6 +371,25 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
     sweep: () => lifecycle.sweep(),
     dispose() {
       lifecycle.stop()
+      for (const disposeEvent of eventDisposers) {
+        try {
+          disposeEvent()
+        } catch {
+          // A host that throws on unsubscribe must not block our teardown.
+        }
+      }
+      eventDisposers.length = 0
+      detachInjector?.()
+      detachInjector = undefined
+      indexer.dispose()
+      for (const disposeTool of toolDisposers) {
+        try {
+          disposeTool()
+        } catch {
+          // A host that throws on unregister must not block our teardown.
+        }
+      }
+      toolDisposers.length = 0
       unregisterRoute?.()
       unregisterRoute = undefined
     },
