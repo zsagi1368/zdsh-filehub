@@ -20,6 +20,13 @@
 export interface UploadMetaEntry {
   sizeBytes: number
   uploadedAtMs: number
+  /**
+   * M6 caption passthrough (P01 §6-D FR-D4): the vision waterfall's caption
+   * for images, persisted so list/library surfaces can read it without
+   * re-running the waterfall. Optional — text/binary files and degraded
+   * waterfalls carry no caption.
+   */
+  imageCaption?: string
 }
 
 /** Per-session metadata record persisted as a single KV value. */

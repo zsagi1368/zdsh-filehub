@@ -34,7 +34,7 @@ import { UploadResultSchema } from '../contract.js'
 import type { MetaStore } from './meta.js'
 import type { WorkspaceResolver } from './workspace.js'
 import { drainAndSendError, drainBody, header, safeDecode, sendError, sendJson } from './httpUtil.js'
-import { isValidSessionId, sanitizeFileName, sanitizeRelativePath } from './pathPolicy.js'
+import { isValidSessionId, PathPolicyError, sanitizeFileName, sanitizeRelativePath } from './pathPolicy.js'
 
 /** Handler shape demanded by dsh-host-webserver WebRoute. */
 export type HttpHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
@@ -191,12 +191,37 @@ function consumeWithLimits(
 }
 
 /**
- * Atomic dedupe write: unique temp name ('wx') → hard-link onto the final
- * name (atomic create-if-absent) → EEXIST means a concurrent identical
- * upload already landed; reuse the winner and return its real path.
+ * M6 adversarial fix (round 1): lexical sanitization cannot see through a
+ * directory symlink/junction that already exists INSIDE the workspace
+ * (planted out-of-band). After materializing the destination directory, both
+ * sides resolve to their REAL paths and containment is re-asserted. The
+ * directory itself may EQUAL the root (flat uploads) — the strict-inside rule
+ * is reserved for the final FILE path, which the sanitized `finalName` join
+ * guarantees sits below the directory.
  */
-async function atomicDedupeWrite(directory: string, finalName: string, bytes: Buffer): Promise<string> {
+async function atomicDedupeWrite(
+  root: string,
+  directory: string,
+  finalName: string,
+  bytes: Buffer,
+): Promise<string> {
   await fsp.mkdir(directory, { recursive: true })
+  let realRoot: string
+  try {
+    realRoot = await fsp.realpath(root)
+  } catch {
+    return Promise.reject(new PathPolicyError('target path escapes the session workspace'))
+  }
+  const realDirectory = await fsp.realpath(directory).catch(() => undefined)
+  if (realDirectory === undefined) {
+    throw new PathPolicyError('target path escapes the session workspace')
+  }
+  const rel = path.relative(realRoot, realDirectory)
+  const escapes =
+    path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`)
+  if (escapes) {
+    throw new PathPolicyError('target path escapes the session workspace')
+  }
   const finalPath = path.join(directory, finalName)
   const unique = `${process.pid.toString(36)}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
   const tempPath = path.join(directory, `.tmp-${unique}-${finalName}`)
@@ -358,8 +383,15 @@ export function createUploadHandler(deps: UploadServiceDeps): HttpHandler {
     const finalPath = path.join(directory, finalName)
 
     try {
-      await atomicDedupeWrite(directory, finalName, bytes)
+      await atomicDedupeWrite(workspace.root, directory, finalName, bytes)
     } catch (error) {
+      if (error instanceof PathPolicyError) {
+        // A symlink/junction inside the workspace tried to carry the write
+        // outside it. Answer the policy rejection without host layout detail.
+        await drainBody(req).catch(() => undefined)
+        sendError(res, 400, error.message)
+        return
+      }
       logWarn(`[filehub] failed to persist upload for session "${sessionId}": ${String(error)}`)
       sendError(res, 500, 'failed to persist upload')
       return

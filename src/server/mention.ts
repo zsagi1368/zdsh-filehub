@@ -34,9 +34,8 @@ import fsPromises from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import path from 'node:path'
 
-import { z } from 'zod'
-
-import { FileEntrySchema, WorkspaceReferenceSchema } from '../contract.js'
+import { FileEntrySchema, SearchResultSchema, WorkspaceReferenceSchema } from '../contract.js'
+export { SearchResultSchema } from '../contract.js'
 import type { FileEntry } from '../contract.js'
 import { sendError, sendJson } from './httpUtil.js'
 import type { HttpHandler } from './upload.js'
@@ -318,16 +317,10 @@ export function createMentionInjector(deps: MentionInjectorDeps): MentionInjecto
 // ---------------------------------------------------------------------------
 
 /**
- * Wire contract for the search response. Defined here rather than
- * src/contract.ts because contract.ts sits outside this domain's writable
- * scope; TODO(M5 consolidation): move next to ListResultSchema.
+ * The wire schema (SearchResultSchema) lives in src/contract.ts since M6 —
+ * the old TODO(M5 consolidation) seam is closed: contract.ts is the single
+ * wire-shape source and this module re-exports it for compatibility.
  */
-export const SearchResultSchema = z.object({
-  sessionId: z.string().min(1),
-  entries: z.array(FileEntrySchema),
-  truncated: z.boolean(),
-})
-export type SearchResult = z.infer<typeof SearchResultSchema>
 
 export interface SearchServiceDeps {
   indexer: WorkspaceIndexer

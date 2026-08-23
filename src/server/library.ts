@@ -51,6 +51,8 @@ export const LibraryEntrySchema = z.object({
   sizeBytes: z.number().int().nonnegative(),
   uploadedAtMs: z.number().int().nonnegative(),
   kind: UsageKindSchema,
+  /** M6 caption passthrough: persisted vision caption when one exists. */
+  imageCaption: z.string().min(1).optional(),
 })
 export type LibraryEntry = z.infer<typeof LibraryEntrySchema>
 
@@ -407,19 +409,46 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
     relativePath: string
     sizeBytes: number
     uploadedAtMs: number
+    imageCaption?: string
     fromBackfill: boolean
   }
 
-  /** Meta-driven entries for one session plus the lazy disk backfill. */
+  /**
+   * Meta-driven entries for one session plus the lazy disk backfill.
+   *
+   * M6 adversarial fix (round 3, KV/disk divergence): every meta-driven row is
+   * stat-verified against the workspace root BEFORE being served; a row whose
+   * file vanished out-of-band (manual deletion, external tooling) is pruned
+   * from the metadata and SKIPPED — the library never surfaces ghost entries,
+   * and the KV self-heals on the same request that noticed the drift.
+   */
   async function entriesFor(sessionRoot: SessionRoot): Promise<{ entries: RawEntry[]; truncated: boolean }> {
     const record = await deps.meta.get(sessionRoot.sessionId).catch(() => undefined)
     const entries: RawEntry[] = []
     let truncated = false
     for (const [relativePath, row] of Object.entries(record?.files ?? {})) {
+      if (sessionRoot.root !== undefined) {
+        const absolute = path.join(sessionRoot.root, relativePath)
+        let alive: boolean
+        try {
+          alive = (await fsp.stat(absolute)).isFile()
+        } catch {
+          alive = false
+        }
+        if (!alive) {
+          await deps.meta
+            .remove(sessionRoot.sessionId, relativePath)
+            .catch(() => undefined)
+          continue
+        }
+      }
       entries.push({
         relativePath,
         sizeBytes: row.sizeBytes,
         uploadedAtMs: row.uploadedAtMs,
+        ...(typeof row.imageCaption === 'string' && row.imageCaption !== ''
+          ? { imageCaption: row.imageCaption }
+          : {}),
         fromBackfill: false,
       })
     }
@@ -508,6 +537,7 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
           sizeBytes: entry.sizeBytes,
           uploadedAtMs: entry.uploadedAtMs,
           kind,
+          ...(entry.imageCaption !== undefined ? { imageCaption: entry.imageCaption } : {}),
         })
         sessionBytes += entry.sizeBytes
       }
@@ -565,12 +595,28 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
     })
   }
 
-  /** Remove one file inside `root` with a strict containment assertion. */
+  /**
+   * Remove one file inside `root` with a strict containment assertion.
+   * M6 adversarial fix (round 1): the containment check runs on REAL paths —
+   * a directory symlink/junction planted inside the workspace must not carry
+   * an unlink outside it. Unresolvable targets are treated as escapes.
+   */
   async function removeContainedFile(root: string, relativePath: string): Promise<boolean> {
     const absolute = path.join(root, relativePath)
     if (!isStrictlyInside(root, absolute)) return false
+    let realRoot: string
+    let realTarget: string
     try {
-      await fsp.unlink(absolute)
+      ;[realRoot, realTarget] = await Promise.all([fsp.realpath(root), fsp.realpath(absolute)])
+    } catch {
+      return false // vanished or unresolvable: nothing contained to remove
+    }
+    if (!isStrictlyInside(realRoot, realTarget)) {
+      deps.logWarn(`[filehub] console refused removal outside the workspace: ${relativePath}`)
+      return false
+    }
+    try {
+      await fsp.unlink(realTarget)
       return true
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

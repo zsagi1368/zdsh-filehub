@@ -15,7 +15,7 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import fsp from 'node:fs/promises'
 
-import { sendError, safeDecode } from './server/httpUtil.js'
+import { header, sendError, safeDecode } from './server/httpUtil.js'
 import { createLifecycle } from './server/lifecycle.js'
 import { createListHandler } from './server/list.js'
 import { createMemoryMetaStore, createMetaStore } from './server/meta.js'
@@ -24,6 +24,7 @@ import { createMentionInjector, createSearchHandler } from './server/mention.js'
 import type { HostEventsLike } from './server/mention.js'
 import { createUploadHandler } from './server/upload.js'
 import type { HttpHandler } from './server/upload.js'
+import { isStrictlyInside, isValidSessionId } from './server/pathPolicy.js'
 import { DEFAULT_DANGEROUS_EXTENSIONS } from './server/guards.js'
 import { createWorkspaceIndexer, createWorkspaceResolver } from './server/workspace.js'
 import type { SessionsLike, WorkspaceIndexer } from './server/workspace.js'
@@ -461,11 +462,36 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   // Additive upload hook: sniffed images get `imageCaption` on their 200 body
   // (synchronous-await variant of the FR-D4 attachment contract — every
   // failure path answers exactly what the inner handler answered).
+  //
+  // M6 caption passthrough: the produced caption is ALSO persisted into the
+  // upload metadata row (meta KV) so GET /list and /library can surface it
+  // without re-running the waterfall. The mapping back to the meta key is
+  // containment-checked: only paths strictly inside this session's workspace
+  // root are ever written.
+  const forwardSlashes = (value: string): string => value.replace(/\\/g, '/')
   const uploadHandlerWithVision = augmentUploadHandlerWithCaption({
     inner: uploadHandler,
     vision: visionService,
     readFile: (filePath) => fsp.readFile(filePath),
     logWarn,
+    recordCaption: async (req, absolutePath, caption) => {
+      const rawSession = header(req, 'x-session-id')
+      if (rawSession === undefined) return
+      const sessionId = safeDecode(rawSession)
+      if (sessionId === undefined || !isValidSessionId(sessionId)) return
+      const workspace = workspaces.resolve(sessionId)
+      if (!workspace || !isStrictlyInside(workspace.root, absolutePath)) return
+      const relFromRoot = forwardSlashes(path.relative(workspace.root, absolutePath))
+      const record = await meta.get(sessionId).catch(() => undefined)
+      const row = record?.files[relFromRoot]
+      if (!row || typeof caption !== 'string' || caption === '') return
+      await meta.record(
+        sessionId,
+        relFromRoot,
+        { ...row, imageCaption: caption },
+        workspace.cwd,
+      )
+    },
   })
 
   const dispatch: HttpHandler = async (req, res) => {

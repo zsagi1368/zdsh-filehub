@@ -19,6 +19,8 @@ export interface UploadedFileResult {
   readonly relativePath: string
   readonly sniffedType: string
   readonly label: string
+  /** M6 caption passthrough (defensive): present only when the vision waterfall produced one. */
+  readonly imageCaption?: string
 }
 
 export type UploadItemStatus = 'pending' | 'uploading' | 'done' | 'error' | 'cancelled'
@@ -111,9 +113,10 @@ function isAbort(error: unknown): boolean {
 /**
  * Structural guard over the wire payload. Hand-rolled instead of importing the
  * zod schema so the client bundle stays free of zod; the schema remains the
- * single source of truth on the host half.
+ * single source of truth on the host half. Exported for direct adversarial
+ * testing (the default XHR transport funnels every 2xx body through here).
  */
-function parseUploadResult(status: number, text: string): UploadedFileResult {
+export function parseUploadResult(status: number, text: string): UploadedFileResult {
   if (status < 200 || status > 299) throw new UploadHttpError(status, text.slice(0, 300))
   let value: unknown
   try {
@@ -131,12 +134,25 @@ function parseUploadResult(status: number, text: string): UploadedFileResult {
   ) {
     throw new UploadResponseError('upload endpoint returned an unexpected body shape')
   }
-  const record = value as Record<string, string>
+  const record = value as Record<string, unknown>
+  if (
+    typeof record.path !== 'string' ||
+    typeof record.relativePath !== 'string' ||
+    typeof record.sniffedType !== 'string' ||
+    typeof record.label !== 'string'
+  ) {
+    throw new UploadResponseError('upload endpoint returned an unexpected body shape')
+  }
   return {
     path: record.path,
     relativePath: record.relativePath,
     sniffedType: record.sniffedType,
     label: record.label,
+    // M6 caption passthrough (defensive optional): forwarded only when the
+    // server attached a non-empty caption; never fabricated client-side.
+    ...(typeof record.imageCaption === 'string' && record.imageCaption.length > 0
+      ? { imageCaption: record.imageCaption }
+      : {}),
   }
 }
 

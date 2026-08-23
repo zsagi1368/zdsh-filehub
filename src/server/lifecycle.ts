@@ -232,6 +232,31 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
       sendError(res, 409, 'target is not a regular file')
       return
     }
+    // M6 adversarial fix (round 1): lexical containment cannot see through a
+    // directory symlink/junction planted inside the workspace. Resolve BOTH
+    // the owner root and the target to their REAL paths and re-assert strict
+    // containment before the unlink; a junctioned escape answers 403.
+    let resolvedRoot = owner.root
+    try {
+      const [realRoot, realTarget] = await Promise.all([
+        fsp.realpath(owner.root),
+        fsp.realpath(target as string),
+      ])
+      if (!isStrictlyInside(realRoot, realTarget)) {
+        sendError(res, 403, 'target path escapes every session workspace')
+        return
+      }
+      resolvedRoot = realRoot
+      target = realTarget
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        res.statusCode = 204
+        res.end()
+        return
+      }
+      sendError(res, 500, 'failed to inspect target')
+      return
+    }
     try {
       await fsp.unlink(target as string)
     } catch (error) {
@@ -244,9 +269,9 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
       return
     }
 
-    await pruneEmptyParents(owner.root, path.dirname(target as string))
+    await pruneEmptyParents(resolvedRoot, path.dirname(target as string))
     if (owner.sessionId !== undefined) {
-      const relativeFromRoot = forwardSlashes(path.relative(owner.root, target as string))
+      const relativeFromRoot = forwardSlashes(path.relative(resolvedRoot, target as string))
       await deps.meta.remove(owner.sessionId, relativeFromRoot).catch(() => undefined)
     }
     res.statusCode = 204

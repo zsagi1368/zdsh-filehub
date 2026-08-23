@@ -107,7 +107,8 @@ export function createListHandler(deps: ListServiceDeps): HttpHandler {
 
     const fileEntries: FileEntry[] = []
     for (const entry of listed) {
-      const recordedAt = record?.files[entry.relativePathFromRoot]?.uploadedAtMs
+      const recorded = record?.files[entry.relativePathFromRoot]
+      const recordedAt = recorded?.uploadedAtMs
       let sizeBytes = 0
       if (!entry.isDirectory) {
         try {
@@ -122,6 +123,11 @@ export function createListHandler(deps: ListServiceDeps): HttpHandler {
         sizeBytes,
         kind: entry.isDirectory ? 'directory' : 'file',
         ...(recordedAt !== undefined ? { uploadedAtMs: recordedAt } : {}),
+        // M6 caption passthrough (P01 §6-D): surface the persisted vision
+        // caption from the upload metadata row when one exists.
+        ...(typeof recorded?.imageCaption === 'string' && recorded.imageCaption !== ''
+          ? { imageCaption: recorded.imageCaption }
+          : {}),
       })
     }
 

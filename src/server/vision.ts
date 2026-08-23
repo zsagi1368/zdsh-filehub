@@ -239,6 +239,8 @@ export interface VisionServiceDeps {
   // ---- test seams (defaults are production behavior) ----
   /** Replace the caption cache entirely (tests inject spy stores). */
   cache?: CaptionCacheStore | undefined
+  /** Replace the HTTP transport (tests observe request options, e.g. the M6 redirect lock). */
+  fetchImpl?: FetchLike | undefined
   /** Replace the public-URL guard (tests inject permissive variants). */
   assertPublicUrl?: ((input: string | URL) => Promise<URL>) | undefined
   /** DNS answers handed to the default public guard (rebinding mocks). */
@@ -278,8 +280,21 @@ export function pickOllamaModel(names: readonly string[]): string | undefined {
   return names.find((name) => VISION_MODEL_HINT.test(name)) ?? names[0]
 }
 
-interface FetchLike {
-  (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }): Promise<{
+export interface FetchLike {
+  (url: string, init?: {
+    method?: string
+    headers?: Record<string, string>
+    body?: string
+    signal?: AbortSignal
+    /**
+     * M6 adversarial hardening (round 2): redirects are REFUSED, never
+     * followed. A hostile public endpoint must not be able to 302 the caption
+     * request onto an intranet/loopback target — the urlPolicy fences judge
+     * the CONFIGURED url only, so following a redirect would bypass them one
+     * hop in. 'error' turns any 3xx into a failed call (degrade, never dial).
+     */
+    redirect?: 'error'
+  }): Promise<{
     ok: boolean
     status: number
     text(): Promise<string>
@@ -287,7 +302,7 @@ interface FetchLike {
 }
 
 const defaultFetch: FetchLike = (url, init) =>
-  fetch(url, init as RequestInit) as unknown as ReturnType<FetchLike>
+  fetch(url, { ...(init as RequestInit), redirect: 'error' }) as unknown as ReturnType<FetchLike>
 
 export function createVisionService(deps: VisionServiceDeps): VisionService {
   const logWarn = deps.logWarn
@@ -302,7 +317,7 @@ export function createVisionService(deps: VisionServiceDeps): VisionService {
   const assertPublicUrl =
     deps.assertPublicUrl ?? ((input: string | URL) => assertPublicHttpUrl(input, { lookup: deps.lookup }))
   const assertLoopbackUrl = deps.assertLoopbackUrl ?? assertLocalLoopbackUrl
-  const doFetch = defaultFetch
+  const doFetch = deps.fetchImpl ?? defaultFetch
 
   const injectedCache = deps.cache
   const kv = injectedCache !== undefined ? undefined : pickKvFacet(deps.storage)
@@ -333,6 +348,7 @@ export function createVisionService(deps: VisionServiceDeps): VisionService {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stream: false, images: [], ...body }),
       signal: AbortSignal.timeout(limitMs),
+      redirect: 'error', // M6: never follow redirects (SSRF one-hop bypass).
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const caption = extractCaption(JSON.parse(await response.text()))
@@ -353,6 +369,7 @@ export function createVisionService(deps: VisionServiceDeps): VisionService {
     const response = await doFetch(`${ollamaEndpoint}/api/tags`, {
       method: 'GET',
       signal: AbortSignal.timeout(probeTimeoutMs),
+      redirect: 'error', // M6: the loopback lock judges THIS url only.
     })
     if (!response.ok) throw new Error(`tags HTTP ${response.status}`)
     const payload = JSON.parse(await response.text()) as { models?: unknown }
@@ -475,6 +492,14 @@ export interface UploadVisionDeps {
   /** Reads the persisted upload back from disk (absolute path). */
   readFile(path: string): Promise<Uint8Array>
   logWarn(message: string): void
+  /**
+   * M6 caption passthrough (P01 §6-D FR-D4 + list/library surfaces): called
+   * after a caption was produced for a stored image so the wiring layer can
+   * persist it into upload metadata. Receives the ORIGINAL request (for the
+   * session id), the absolute stored path, and the caption. Failures are
+   * logged and swallowed — a metadata write must never break the response.
+   */
+  recordCaption?(req: IncomingMessage, absolutePath: string, caption: string): Promise<void>
 }
 
 /**
@@ -548,7 +573,13 @@ export function augmentUploadHandlerWithCaption(deps: UploadVisionDeps): HttpHan
     try {
       const stored = await deps.readFile(verdict.data.path)
       const caption = await deps.vision.caption(stored)
-      if (caption !== undefined) parsed.imageCaption = caption
+      if (caption !== undefined) {
+        parsed.imageCaption = caption
+        // M6: persist so list/library can surface the caption from metadata.
+        await deps.recordCaption?.(req, verdict.data.path, caption).catch((error: unknown) => {
+          deps.logWarn(`[filehub] caption persistence degraded: ${String(error)}`)
+        })
+      }
     } catch (error: unknown) {
       deps.logWarn(`[filehub] vision caption stage degraded: ${String(error)}`)
     }

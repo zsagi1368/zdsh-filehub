@@ -42,7 +42,7 @@ import path from 'node:path'
 import { ParseCache } from './parse/cache.js'
 import { parseDocument, ParseAbortedError } from './parse/waterfall.js'
 import { sniff } from '../detect.js'
-import { assertInside } from './pathPolicy.js'
+import { assertInside, isStrictlyInside } from './pathPolicy.js'
 import type { DocumentFormat, DocumentOverview } from './parse/types.js'
 import type { LoggerLike } from '../index.js'
 
@@ -275,6 +275,7 @@ function sessionCwdOf(exec: ToolRunContextLike): string {
 
 async function readWorkspaceFile(
   target: string,
+  root: string,
   signal: AbortSignal,
 ): Promise<{ bytes: Buffer; sizeBytes: number }> {
   let stat
@@ -284,6 +285,19 @@ async function readWorkspaceFile(
     throw new Error(`document not found: ${target}`)
   }
   if (!stat.isFile()) throw new Error(`not a regular file: ${target}`)
+  // M6 adversarial fix (round 1): re-assert containment on REAL paths so a
+  // directory symlink/junction planted inside the workspace cannot carry the
+  // read outside it. The lexical assertInside in resolveWorkspaceTarget still
+  // applies upstream; this closes the one hole lexical resolution cannot see.
+  try {
+    const [realRoot, realTarget] = await Promise.all([fsp.realpath(root), fsp.realpath(target)])
+    if (!isStrictlyInside(realRoot, realTarget)) {
+      throw new Error('target path escapes the session workspace')
+    }
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('escapes the session workspace')) throw error
+    throw new Error(`document not found: ${target}`)
+  }
   // Defense-in-depth ceiling (uploads are already bounded at 50 MiB upstream).
   if (stat.size > 64 * 1024 * 1024) throw new Error('document exceeds the 64 MiB read ceiling')
   try {
@@ -499,8 +513,9 @@ export function registerReadingTools(
 
           const sessionCwd = sessionCwdOf(exec)
           const target = resolveWorkspaceTarget(sessionCwd, storageDirName, requestedPath)
+          const workspaceRoot = path.join(path.resolve(sessionCwd), storageDirName)
 
-          const { bytes } = await readWorkspaceFile(target, exec.signal)
+          const { bytes } = await readWorkspaceFile(target, workspaceRoot, exec.signal)
           const verdict = sniff(bytes, path.basename(target))
           // Cache key: sha256(content) + format + canonical options (FR-C7).
           const cacheKey = ParseCache.keyOf(bytes, verdict.mime, optionsKeyOf(sheet, probe))
