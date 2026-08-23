@@ -13,6 +13,7 @@
 
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import fsp from 'node:fs/promises'
 
 import { sendError, safeDecode } from './server/httpUtil.js'
 import { createLifecycle } from './server/lifecycle.js'
@@ -43,6 +44,14 @@ import {
   createSettingsService,
 } from './server/settings.js'
 import type { SettingsService } from './server/settings.js'
+// M4 vision waterfall (additive).
+import {
+  augmentUploadHandlerWithCaption,
+  createImageCapableGate,
+  createVisionService,
+} from './server/vision.js'
+import type { LlmRuntimeFaceLike, VisionService } from './server/vision.js'
+import { assertLocalLoopbackUrl, assertPublicHttpUrl, UrlPolicyError } from './server/urlPolicy.js'
 
 export { sniff } from './detect.js'
 export type { SniffKind, SniffResult } from './detect.js'
@@ -54,6 +63,17 @@ export type { ReadingBudgets, SystemPromptRegistryLike, ToolsRegistryLike }
 // M5 re-exports (additive): console services + settings center.
 export { createLibraryService, createSettingsService }
 export type { LibraryService, SettingsService }
+
+// M4 re-exports (additive): vision waterfall + url policy fences.
+export {
+  augmentUploadHandlerWithCaption,
+  createImageCapableGate,
+  createVisionService,
+  assertLocalLoopbackUrl,
+  assertPublicHttpUrl,
+}
+export type { LlmRuntimeFaceLike, VisionService }
+export { UrlPolicyError }
 
 /** Extension deny list served as the default value of `upload.dangerousExtensions`. */
 export { DEFAULT_DANGEROUS_EXTENSIONS }
@@ -86,6 +106,41 @@ export interface MentionDomainConfig {
   searchLimit: number
 }
 
+/**
+ * M4 vision waterfall knobs (P01 §6-D). All optional; defaults live in the
+ * service. Mode/privacy toggles are NOT here — they ride the settings center
+ * (`vision.mode`, `privacy.localFirstVision`).
+ */
+export interface VisionDomainConfig {
+  /**
+   * Level 1: explicit caption endpoint (http/https, public-only per
+   * urlPolicy). Absent = level skipped.
+   */
+  endpoint?: string
+  /**
+   * Privacy opt-in counterpart of the panel toggle: when settings
+   * privacy.localFirstVision is true (the default) this must be explicitly
+   * true before the outbound endpoint ever dials. Default false.
+   */
+  allowExternalVision?: boolean
+  /** Level 2 toggle: local Ollama probe. Default true. */
+  ollamaProbe?: boolean
+  /** Probe base URL; loopback-locked. Default http://127.0.0.1:11434. */
+  ollamaEndpoint?: string
+  /** Outbound/generate timeout in ms. Default 20 000. */
+  timeoutMs?: number
+  /** Tags-probe timeout in ms. Default 3 000. */
+  probeTimeoutMs?: number
+  /** Memory caption-cache bound (KV-backed caches are unbounded). Default 512. */
+  cacheEntries?: number
+  /**
+   * FR-D1 route hint: exact provider/model interrogated through the host llm
+   * face for inputModalities. Absent/faceless = non-native (waterfall runs).
+   * TODO(integration): replace with the host session-route seam once exposed.
+   */
+  nativeRoute?: { readonly provider: string; readonly model: string }
+}
+
 export interface FileHubConfig {
   /** Session-workspace subdirectory name created under the session cwd. */
   storageDirName: string
@@ -110,6 +165,8 @@ export interface FileHubConfig {
   console?: {
     maxEntries?: number
   }
+  /** M4 vision waterfall; defaults apply when omitted (additive, M1–M3-safe). */
+  vision?: VisionDomainConfig
 }
 
 const MIB = 1024 * 1024
@@ -137,6 +194,7 @@ function resolveConfig(overrides?: Partial<FileHubConfig>): FileHubConfig & {
   upload: Required<Omit<UploadDomainConfig, 'dangerousExtensions'>> &
     Pick<UploadDomainConfig, 'dangerousExtensions'>
   mention: MentionDomainConfig
+  vision: VisionDomainConfig
 } {
   return {
     storageDirName: overrides?.storageDirName ?? filehubConfigDefaults.storageDirName,
@@ -154,6 +212,9 @@ function resolveConfig(overrides?: Partial<FileHubConfig>): FileHubConfig & {
     } as MentionDomainConfig,
     console: {
       ...overrides?.console,
+    },
+    vision: {
+      ...overrides?.vision,
     },
   }
 }
@@ -205,6 +266,15 @@ export interface HostContext {
    * Optional; absent = no guidance section is contributed.
    */
   readonly systemPrompt?: SystemPromptRegistryLike
+  /**
+   * M4: host llm runtime face, structurally mirroring the verified
+   * @deepseek-ai/dsh-llm LlmRuntime (Fork/packages/llm/llm/lib/types/
+   * index.d.ts:217 class, :313 resolveModelInfo) — the FR-D1 route gate reads
+   * the exact route's inputModalities through it. Optional: without it (and
+   * without config.vision.nativeRoute) every session counts as non-native
+   * and the caption waterfall runs.
+   */
+  readonly llm?: LlmRuntimeFaceLike
 }
 
 /** Host services required by the full feature set (finalized per domain). */
@@ -362,6 +432,42 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   const settingsGetHandler = createSettingsGetHandler({ service: settingsService })
   const settingsPutHandler = createSettingsPutHandler({ service: settingsService })
 
+  // ---- M4 vision caption waterfall (P01 §6-D) ------------------------------
+  // Route gate first (FR-D1): a natively vision-capable session model keeps
+  // the waterfall dormant. Mode/privacy toggles read the live settings center;
+  // captions cache into their own KV unit keyed by sha256+channel.
+  const visionService: VisionService = createVisionService({
+    logWarn,
+    storage: ctx.storage,
+    resolveImageCapable: createImageCapableGate({
+      llm: ctx.llm,
+      nativeRoute: resolved.vision.nativeRoute,
+      logWarn,
+    }),
+    readGates: async () => {
+      const settings = await settingsService.get()
+      return {
+        mode: settings['vision.mode'],
+        localFirstVision: settings['privacy.localFirstVision'],
+      }
+    },
+    endpoint: resolved.vision.endpoint,
+    allowExternalVision: resolved.vision.allowExternalVision,
+    ollamaProbe: resolved.vision.ollamaProbe,
+    ollamaEndpoint: resolved.vision.ollamaEndpoint,
+    timeoutMs: resolved.vision.timeoutMs,
+    probeTimeoutMs: resolved.vision.probeTimeoutMs,
+  })
+  // Additive upload hook: sniffed images get `imageCaption` on their 200 body
+  // (synchronous-await variant of the FR-D4 attachment contract — every
+  // failure path answers exactly what the inner handler answered).
+  const uploadHandlerWithVision = augmentUploadHandlerWithCaption({
+    inner: uploadHandler,
+    vision: visionService,
+    readFile: (filePath) => fsp.readFile(filePath),
+    logWarn,
+  })
+
   const dispatch: HttpHandler = async (req, res) => {
     let pathname = '/'
     try {
@@ -381,7 +487,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
         })
     }
     if (pathname === '/api/filehub/upload') {
-      if (req.method === 'POST') return run(uploadHandler)
+      if (req.method === 'POST') return run(uploadHandlerWithVision)
       sendError(res, 405, 'method not allowed')
       return
     }

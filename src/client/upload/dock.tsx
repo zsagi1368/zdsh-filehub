@@ -14,6 +14,7 @@ import type { ReactNode } from 'react'
 import { formatBytes, injectStylesOnce } from '../util.js'
 import type { Lang } from '../util.js'
 import { STYLES } from '../styles.js'
+import { t } from '../i18n.js'
 import { UPLOAD_ERROR_MESSAGES } from './queue.js'
 import type { UploadQueue, UploadQueueItem } from './queue.js'
 import { useLang } from './entries.js'
@@ -145,6 +146,24 @@ interface DockRowProps {
   readonly onRemoveUploaded: (item: UploadQueueItem) => void
 }
 
+/**
+ * M4 vision badge source: the upload contract carries an optional
+ * `imageCaption` on image uploads (src/contract.ts UploadResultSchema). The
+ * generic queue parser currently forwards only the four core fields, so this
+ * reads the field defensively — the badge lights up the moment the passthrough
+ * lands, and stays absent otherwise (never claims a caption that isn't there).
+ */
+interface CaptionedUploadResult {
+  readonly sniffedType: string
+  readonly imageCaption?: string | undefined
+}
+
+function captionOf(item: UploadQueueItem): string | undefined {
+  const result = item.result as Partial<CaptionedUploadResult> | undefined
+  const caption = result?.imageCaption
+  return typeof caption === 'string' && caption.length > 0 ? caption : undefined
+}
+
 function DockRow(props: DockRowProps): ReactNode {
   const { item, lang, deleting, deleteError, onRetry, onRemove, onRemoveUploaded } = props
   const statusLabel = STATUS_LABELS[item.status][lang]
@@ -154,6 +173,7 @@ function DockRow(props: DockRowProps): ReactNode {
   const badge =
     badgeSource !== '' ? badgeSource.slice(badgeSource.indexOf('/') + 1).toUpperCase().slice(0, 5) : extensionBadge(item.name)
   const errorText = item.error ? UPLOAD_ERROR_MESSAGES[item.error.code][lang] : undefined
+  const caption = item.status === 'done' ? captionOf(item) : undefined
 
   return (
     <div className="zdsh-filehub-row" data-status={item.status}>
@@ -162,6 +182,11 @@ function DockRow(props: DockRowProps): ReactNode {
         {item.name}
       </span>
       <span className="zdsh-filehub-size">{formatBytes(item.status === 'done' ? item.sizeBytes : Math.max(item.sentBytes, 0))}</span>
+      {caption ? (
+        <span className="zdsh-filehub-explained" title={caption}>
+          {t('dock.explained')}
+        </span>
+      ) : null}
       {item.status === 'uploading' || item.status === 'pending' ? (
         <span
           className="zdsh-filehub-bar"

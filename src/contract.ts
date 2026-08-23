@@ -15,6 +15,8 @@ export const UploadResultSchema = z.object({
   sniffedType: z.string().min(1),
   /** Sanitized display label. */
   label: z.string().min(1),
+  /** M4: one-sentence image caption; present only when the vision waterfall produced one. */
+  imageCaption: z.string().min(1).optional(),
 })
 export type UploadResult = z.infer<typeof UploadResultSchema>
 

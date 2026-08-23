@@ -24,6 +24,9 @@ import { detectLang } from './util.js'
 import type { Lang } from './util.js'
 
 const ZH: Record<string, string> = {
+  // ---- Upload dock (M4 vision badge) ----------------------------------------
+  'dock.explained': '已讲解',
+
   // ---- Console (conversation.view tab) -------------------------------------
   'console.tab': '文件',
   'console.title': '文件中心',
@@ -88,6 +91,9 @@ const ZH: Record<string, string> = {
 }
 
 const EN: Record<string, string> = {
+  // ---- Upload dock (M4 vision badge) ----------------------------------------
+  'dock.explained': 'Explained',
+
   // ---- Console --------------------------------------------------------------
   'console.tab': 'Files',
   'console.title': 'File center',
