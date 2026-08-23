@@ -1,0 +1,13 @@
+# FileHub standalone-plugin build settings.
+#
+# Host-provided packages (@deepseek-ai/*) are declared as OPTIONAL PEERS and
+# must never be fetched from any registry: the host resolves them at runtime,
+# and development types come from link: devDependencies into ../Fork.
+# pnpm 11 reads its settings from this file (.npmrc keys are ignored).
+autoInstallPeers: false
+dedupePeerDependents: true
+
+# esbuild needs its postinstall to verify the platform binary
+# (pnpm 11 strict-dep-builds syntax, same key as the Fork workspace).
+allowBuilds:
+  esbuild: true
