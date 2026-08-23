@@ -20,8 +20,11 @@
  *   caller's fiber, and disposes them when the declaration collapses.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-// Type-only: pulls the ui-conversation SlotMap merge (conversation.input.*).
+// Type-only: pulls the ui-conversation SlotMap merge (conversation.input.*,
+// conversation.view).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: pulls the ui-settings SlotMap merge (settings.plugins.tab).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 
 // M2 mention pipeline (P01 §6-B): @ trigger source + chip reference bar.
 import { FileHubChips } from './mention/chips.js'
@@ -29,6 +32,10 @@ import { registerMentionTrigger } from './mention/source.js'
 import { FileHubDock } from './upload/dock.js'
 import { resolveSessionId, UploadEntries } from './upload/entries.js'
 import { UploadQueue } from './upload/queue.js'
+// M5 console + settings + i18n (P01 §6-E / §7).
+import { FileConsoleView } from './console/FileConsoleView.js'
+import { FileHubSettingsPanel } from './settings/FileHubSettingsPanel.js'
+import { bindHostLocale, t } from './i18n.js'
 
 /** Client bundles this plugin requires the host to provide first. */
 const inject = [
@@ -59,6 +66,21 @@ function getQueue(): UploadQueue {
 
 function apply(ctx: ClientContext): void {
   ctx.logger?.info?.('[filehub] client M1 upload domain loaded')
+
+  // M5 language signal: follow the host locale when the composition ships
+  // dsh-client-locale (guarded structural probe — a bare context keeps the
+  // navigator-derived default; see src/client/i18n.ts header for evidence).
+  bindHostLocale(
+    (ctx as { locale?: Parameters<typeof bindHostLocale>[0] }).locale,
+  )
+
+  // GLOBAL DISABLE COORDINATION (P01 §7, FR-E5): settings.enabled=false is the
+  // single master switch. Degradation ownership per face:
+  // - console view: FileConsoleView gates on GET /api/filehub/settings and
+  //   renders nothing when disabled;
+  // - this tab registration itself stays live so users can re-enable;
+  // - upload entries/dock + mention trigger/chips degrade on their own terms
+  //   in their modules (M1/M2 behavior, unchanged here).
 
   const queue = getQueue()
 
@@ -110,6 +132,39 @@ function apply(ctx: ClientContext): void {
         inject: (): FileHubInjectFace => ({ queue }),
       },
       FileHubChips,
+    ),
+  )
+
+  // ---- M5 file console tab (P01 §6-E FR-E1/E2/E3) ---------------------------
+  // A 'Files' tab in the conversation view ring. Label is a thunk over the
+  // i18n dictionary so it follows host locale switches without re-registration.
+  ctx.slots.inject('conversation.view', () =>
+    ctx.slots.register(
+      {
+        name: 'conversation.view',
+        id: 'zdsh-filehub-files',
+        order: 30,
+        registrant: 'zdsh-filehub',
+        label: () => t('console.tab'),
+      },
+      FileConsoleView,
+    ),
+  )
+
+  // ---- M5 settings center tab (P01 §7 FR-E5') -------------------------------
+  // One page inside the host's Plugins settings section. Standalone-plugin
+  // transport: the panel reads/writes FileHub's own GET/PUT settings endpoints
+  // (see src/client/settings/FileHubSettingsPanel.tsx header).
+  ctx.slots.inject('settings.plugins.tab', () =>
+    ctx.slots.register(
+      {
+        name: 'settings.plugins.tab',
+        id: 'zdsh-filehub',
+        order: 60,
+        registrant: 'zdsh-filehub',
+        label: () => t('settings.tab'),
+      },
+      FileHubSettingsPanel,
     ),
   )
 }

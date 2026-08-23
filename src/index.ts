@@ -14,7 +14,7 @@
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import { sendError } from './server/httpUtil.js'
+import { sendError, safeDecode } from './server/httpUtil.js'
 import { createLifecycle } from './server/lifecycle.js'
 import { createListHandler } from './server/list.js'
 import { createMemoryMetaStore, createMetaStore } from './server/meta.js'
@@ -29,6 +29,20 @@ import type { SessionsLike, WorkspaceIndexer } from './server/workspace.js'
 import { ParseCache } from './server/parse/cache.js'
 import { registerReadingTools } from './server/tools.js'
 import type { ReadingBudgets, SystemPromptRegistryLike, ToolsRegistryLike } from './server/tools.js'
+import {
+  createLibraryHandler,
+  createLibraryService,
+  createCleanupHandler,
+  createSessionDeleteHandler,
+  createUsageHandler,
+} from './server/library.js'
+import type { LibraryService } from './server/library.js'
+import {
+  createSettingsGetHandler,
+  createSettingsPutHandler,
+  createSettingsService,
+} from './server/settings.js'
+import type { SettingsService } from './server/settings.js'
 
 export { sniff } from './detect.js'
 export type { SniffKind, SniffResult } from './detect.js'
@@ -36,6 +50,10 @@ export type { SniffKind, SniffResult } from './detect.js'
 // M3 re-exports (additive).
 export { registerReadingTools, ParseCache }
 export type { ReadingBudgets, SystemPromptRegistryLike, ToolsRegistryLike }
+
+// M5 re-exports (additive): console services + settings center.
+export { createLibraryService, createSettingsService }
+export type { LibraryService, SettingsService }
 
 /** Extension deny list served as the default value of `upload.dangerousExtensions`. */
 export { DEFAULT_DANGEROUS_EXTENSIONS }
@@ -85,6 +103,13 @@ export interface FileHubConfig {
     cacheEntries?: number
     cacheBytes?: number
   }
+  /**
+   * M5 console domain; defaults apply when omitted (additive, M1–M4-safe).
+   * `maxEntries` bounds one library/usage aggregation page.
+   */
+  console?: {
+    maxEntries?: number
+  }
 }
 
 const MIB = 1024 * 1024
@@ -127,6 +152,9 @@ function resolveConfig(overrides?: Partial<FileHubConfig>): FileHubConfig & {
       ...filehubConfigDefaults.mention,
       ...overrides?.mention,
     } as MentionDomainConfig,
+    console: {
+      ...overrides?.console,
+    },
   }
 }
 
@@ -313,6 +341,27 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
 
   const listHandler = createListHandler({ meta, workspaces })
 
+  // ---- M5 file console + settings center (P01 §6-E / §7) -------------------
+  // The console reads through the same meta seam as upload/lifecycle and keeps
+  // its derived enrichment (kind buckets, backfill stamps) in its own KV unit;
+  // settings persist under the `filehub.*` namespace in a second unit.
+  const library = createLibraryService({
+    meta,
+    workspaces,
+    storage: ctx.storage,
+    storageRootOf: (cwd) => path.join(path.resolve(cwd), resolved.storageDirName),
+    logWarn,
+    maxEntries: resolved.console?.maxEntries,
+  })
+  const libraryHandler = createLibraryHandler({ service: library })
+  const usageHandler = createUsageHandler({ service: library })
+  const sessionDeleteHandler = createSessionDeleteHandler({ service: library })
+  const cleanupHandler = createCleanupHandler({ service: library })
+
+  const settingsService = createSettingsService({ storage: ctx.storage, logWarn })
+  const settingsGetHandler = createSettingsGetHandler({ service: settingsService })
+  const settingsPutHandler = createSettingsPutHandler({ service: settingsService })
+
   const dispatch: HttpHandler = async (req, res) => {
     let pathname = '/'
     try {
@@ -348,6 +397,37 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
     }
     if (pathname === '/api/filehub/search') {
       if (req.method === 'GET') return run(searchHandler)
+      sendError(res, 405, 'method not allowed')
+      return
+    }
+    if (pathname === '/api/filehub/library') {
+      if (req.method === 'GET') return run(libraryHandler)
+      sendError(res, 405, 'method not allowed')
+      return
+    }
+    if (pathname === '/api/filehub/usage') {
+      if (req.method === 'GET') return run(usageHandler)
+      sendError(res, 405, 'method not allowed')
+      return
+    }
+    if (pathname.startsWith('/api/filehub/session/')) {
+      const sessionId = safeDecode(pathname.slice('/api/filehub/session/'.length))
+      if (sessionId === undefined || sessionId === '') {
+        sendError(res, 400, 'malformed session id')
+        return
+      }
+      if (req.method === 'DELETE') return run((rq, rs) => sessionDeleteHandler(rq, rs, sessionId))
+      sendError(res, 405, 'method not allowed')
+      return
+    }
+    if (pathname === '/api/filehub/cleanup') {
+      if (req.method === 'POST') return run(cleanupHandler)
+      sendError(res, 405, 'method not allowed')
+      return
+    }
+    if (pathname === '/api/filehub/settings') {
+      if (req.method === 'GET') return run(settingsGetHandler)
+      if (req.method === 'PUT') return run(settingsPutHandler)
       sendError(res, 405, 'method not allowed')
       return
     }
@@ -390,6 +470,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
         }
       }
       toolDisposers.length = 0
+      library.dispose()
       unregisterRoute?.()
       unregisterRoute = undefined
     },
