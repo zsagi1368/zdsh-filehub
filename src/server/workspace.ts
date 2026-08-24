@@ -156,7 +156,14 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
       },
       (error: unknown) => {
         cleanup()
-        reject(error)
+        // Non-Error rejections (host string throws) are wrapped, never swallowed.
+        if (error instanceof Error) {
+          reject(error)
+        } else {
+          const wrapped = new AbortError()
+          ;(wrapped as Error & { cause?: unknown }).cause = error
+          reject(wrapped)
+        }
       },
     )
   })
@@ -197,6 +204,8 @@ async function walkWorkspace(
   const entries: IndexCandidate[] = []
   let truncated = false
   const queue: WalkDir[] = [{ absolute: path.resolve(cwd), relative: '', ancestors: rootAncestors }]
+  // Indirection defeats control-flow narrowing of `signal.aborted` across awaits.
+  const aborted = (): boolean => signal.aborted
 
   while (queue.length > 0) {
     if (signal.aborted) throw new AbortError()
@@ -204,21 +213,21 @@ async function walkWorkspace(
       truncated = true
       break
     }
-    const dir = queue.shift()
-    if (!dir) break
+    const dir: WalkDir | undefined = queue.shift()
+    if (dir === undefined) break
 
     let handle: AsyncIterable<Dirent> & { close?: () => Promise<void> }
     try {
       handle = await raceAbort(fsPromises.opendir(dir.absolute), signal)
     } catch (error: unknown) {
-      if (signal.aborted) throw error
+      if (aborted()) throw error
       opts.logWarn(`[filehub] index skipped unreadable directory ${dir.relative || '.'}: ${String(error)}`)
       continue
     }
 
     try {
       for await (const dirent of handle as unknown as AsyncIterable<Dirent>) {
-        if (signal.aborted) throw new AbortError()
+        if (aborted()) throw new AbortError()
         if (entries.length >= opts.maxFiles) {
           truncated = true
           break
@@ -244,7 +253,7 @@ async function walkWorkspace(
           try {
             followed = await raceAbort(fsPromises.stat(childAbsolute), signal)
           } catch (error: unknown) {
-            if (signal.aborted) throw error
+            if (aborted()) throw error
             continue // dangling or unreadable link: skip silently
           }
           if (followed.isFile()) {
@@ -256,7 +265,7 @@ async function walkWorkspace(
           try {
             real = await raceAbort(fsPromises.realpath(childAbsolute), signal)
           } catch (error: unknown) {
-            if (signal.aborted) throw error
+            if (aborted()) throw error
             continue
           }
           if (dir.ancestors.has(real)) continue // cycle: do not descend
@@ -359,11 +368,11 @@ export function createWorkspaceIndexer(deps: WorkspaceIndexerDeps): WorkspaceInd
       }
       const cached = slot.index
       const fresh = !slot.dirty && cached !== undefined && now() - slot.builtAtMs < ttlMs
-      if (fresh && cached) return cached
-      if (slot.building) {
-        return slot.building.catch(() => slot?.index)
+      if (fresh) return cached
+      if (slot.building !== undefined) {
+        return slot.building.catch(() => slot.index)
       }
-      return startBuild(sessionId, cwd).catch(() => slot?.index)
+      return startBuild(sessionId, cwd).catch(() => slot.index)
     },
 
     invalidateAll() {

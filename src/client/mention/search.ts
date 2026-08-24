@@ -106,6 +106,6 @@ export function createDebouncedSearch(
       signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
       if (timer !== undefined) clearTimeout(timer)
       timer = setTimeout(() => flush(query), Math.max(0, delayMs))
-      timer.unref?.()
+      if (typeof timer.unref === 'function') timer.unref()
     })
 }

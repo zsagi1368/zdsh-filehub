@@ -250,7 +250,7 @@ export function sendRequest(
       }
       const chunk = stream[index]
       index += 1
-      req.write(Buffer.from(chunk))
+      req.write(Buffer.from(chunk!))
     }, Math.max(1, spec.slowBody.delayMs))
     timer.unref?.()
   }
@@ -309,6 +309,6 @@ export function uploadRequest(
     method: 'POST',
     path: '/api/filehub/upload',
     headers: uploadHeaders(spec),
-    body: spec.body,
+    ...(spec.body !== undefined ? { body: spec.body } : {}),
   })
 }

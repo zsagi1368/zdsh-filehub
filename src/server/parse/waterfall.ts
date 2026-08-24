@@ -79,7 +79,7 @@ export function abortRace<T>(work: Promise<T>, signal: AbortSignal | undefined, 
         if (settled) return
         settled = true
         cleanup()
-        reject(error)
+        reject(error instanceof Error ? error : new Error(String(error)))
       },
     )
   })
@@ -97,7 +97,7 @@ function deadlineScope(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(new ParseAbortedError('parse timed out')), timeoutMs)
   // Never hold the process open for a parse.
-  timer.unref?.()
+  if (typeof timer.unref === 'function') timer.unref()
   const onOuterAbort = (): void =>
     controller.abort(signal?.reason ?? new ParseAbortedError('aborted by caller'))
   if (signal !== undefined) {
@@ -187,11 +187,13 @@ export async function parseDocument(bytes: Uint8Array, fileName: string | undefi
       if (scope.scopedSignal.aborted) {
         throw new ParseAbortedError('parse aborted before stage dispatch')
       }
+      // Indirection defeats control-flow narrowing of `.aborted` across awaits.
+      const abortedNow = (): boolean => scope.scopedSignal.aborted
       try {
         const outcome = await stage.run(bytes, scope.scopedSignal)
         return { format: outcome.overview.format, text: outcome.text, overview: outcome.overview, warnings }
       } catch (error) {
-        if (scope.scopedSignal.aborted) throw error instanceof Error ? error : new ParseAbortedError(String(error))
+        if (abortedNow()) throw error instanceof Error ? error : new ParseAbortedError(String(error))
         // Input mistakes skip the degradation ladder entirely (see class note).
         if (error instanceof DocumentInputError) throw error
         const message = `[filehub] ${stage.format} parse failed (${stage.describe()}): ${String(error)}; falling through`

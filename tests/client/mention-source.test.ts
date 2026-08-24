@@ -14,7 +14,7 @@ import {
 import type { SearchFetcher, SearchResponse } from '../../src/client/mention/search.js'
 
 function makeSearchResponse(entries: Array<{ relativePath: string; kind: 'file' | 'directory' }>): SearchResponse {
-  return { sessionId: 's1', entries: entries.map((entry) => ({ ...entry, sizeBytes: 0, path: `/w/${entry.relativePath}` })), truncated: false }
+  return { sessionId: 's1', entries: entries.map(entry => ({ ...entry, sizeBytes: 0, path: `/w/${entry.relativePath}` })), truncated: false }
 }
 
 const fetcher: SearchFetcher = async (_sessionId, query) =>
@@ -26,7 +26,6 @@ const fetcher: SearchFetcher = async (_sessionId, query) =>
 
 /** Structural session projection; the real type brands the id, tests need no brand. */
 type AnySession = Parameters<ReturnType<typeof buildFileHubTriggerSource>['candidates']>[0]
-type AnyPick = Parameters<ReturnType<typeof buildFileHubTriggerSource>['onPick']>[0]
 const SESSION: AnySession = { sessionId: 's1' } as AnySession
 const REQUEST = (query = '', quoted = false) => ({
   query,
@@ -47,14 +46,14 @@ describe('FileHub @ trigger source', () => {
     const candidates = await source.candidates(SESSION, REQUEST('deep'))
     expect(candidates).toHaveLength(1)
     expect(candidates[0]).toMatchObject({ name: 'deep.ts', description: 'src' })
-    expect(JSON.parse(candidates[0].value as string)).toEqual({ p: 'src/deep.ts', k: 'file' })
+    expect(JSON.parse(candidates[0]!.value as string)).toEqual({ p: 'src/deep.ts', k: 'file' })
   })
 
   it('onPick inserts the host-grammar token plus one trailing space', async () => {
     const source = buildFileHubTriggerSource({ fetchSearch: fetcher, sessionId: () => 's1' })
     const [candidate] = await source.candidates(SESSION, REQUEST('deep'))
     const outcome = source.onPick({
-      candidate,
+      candidate: candidate!,
       session: SESSION,
       position: 'inline',
       via: 'menu',
@@ -66,7 +65,7 @@ describe('FileHub @ trigger source', () => {
     const [dir] = await source.candidates(SESSION, REQUEST(''))
     void dir
     const dirCandidate = {
-      ...candidate,
+      ...candidate!,
       value: JSON.stringify({ p: 'src', k: 'directory' }),
     }
     const dirOutcome = source.onPick({
@@ -85,7 +84,7 @@ describe('FileHub @ trigger source', () => {
     const source = buildFileHubTriggerSource({ fetchSearch: spacedFetcher, sessionId: () => 's1' })
     const [candidate] = await source.candidates(SESSION, REQUEST())
     const outcome = source.onPick({
-      candidate,
+      candidate: candidate!,
       session: SESSION,
       position: 'inline',
       via: 'menu',
@@ -117,7 +116,7 @@ describe('FR-B8 graceful degradation', () => {
       key: () => null,
       removeItem: () => undefined,
       setItem: () => undefined,
-    } as Storage
+    }
   }
 
   it('reads the localStorage flag', () => {

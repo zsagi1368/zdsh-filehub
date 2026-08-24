@@ -29,7 +29,7 @@ export interface SettingsFormState {
   /** Last successfully persisted snapshot (the dirty baseline). */
   readonly savedValues: FileHubSettings
   readonly status: SettingsSaveStatus
-  readonly errorMessage?: string
+  readonly errorMessage?: string | undefined
 }
 
 export function settingsEqual(a: FileHubSettings, b: FileHubSettings): boolean {

@@ -549,7 +549,9 @@ export function augmentUploadHandlerWithCaption(deps: UploadVisionDeps): HttpHan
     }
     if (failure !== undefined) {
       // Mirror the dispatch-level safety net without double-responding.
-      deps.logWarn(`[filehub] upload handler failure (vision wrap): ${String(failure)}`)
+      const detail =
+        failure instanceof Error ? failure.message : typeof failure === 'string' ? failure : JSON.stringify(failure)
+      deps.logWarn(`[filehub] upload handler failure (vision wrap): ${detail}`)
       if (capturedStatus === undefined) shim.statusCode = 500
       flush(capturedBody ?? JSON.stringify({ error: 'internal filehub error' }))
       return

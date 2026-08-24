@@ -30,7 +30,7 @@ let disposeDomain: (() => void) | undefined
 
 interface DomainHandle {
   port: number
-  close(): Promise<void>
+  close: () => Promise<void>
 }
 
 async function startDomain(
@@ -46,8 +46,8 @@ async function startDomain(
     },
   })
   const server = await startRouteServer(route)
-  disposeDomain = domain.dispose
-  return { port: server.port, close: server.close }
+  disposeDomain = () => { domain.dispose() }
+  return { port: server.port, close: () => server.close() }
 }
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
@@ -75,7 +75,12 @@ async function upload(
   body: Uint8Array,
   relPath?: string,
 ): Promise<void> {
-  const response = await uploadRequest(agent, portValue, { sessionId, fileName, body, relPath })
+  const response = await uploadRequest(agent, portValue, {
+    sessionId,
+    fileName,
+    body,
+    ...(relPath === undefined ? {} : { relPath }),
+  })
   expect(response.status).toBe(200)
 }
 
@@ -91,8 +96,8 @@ async function fetchFlat(): Promise<Array<{ name: string; path: string; kind: st
     totalBytes: number
     truncated: boolean
   }
-  return body.sessions.flatMap((session) =>
-    session.entries.map((entry) => ({ ...entry, sessionId: session.sessionId })),
+  return body.sessions.flatMap(session =>
+    session.entries.map(entry => ({ ...entry, sessionId: session.sessionId })),
   )
 }
 
@@ -103,17 +108,17 @@ describe('GET /api/filehub/library', () => {
       { id: 'sess-b', cwd: cwdB },
     ])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'shot.png', PNG_BYTES)
     await upload(port, 'sess-b', 'notes.txt', TEXT_BYTES)
 
     const flat = await fetchFlat()
-    const ids = new Set(flat.map((entry) => entry.sessionId))
+    const ids = new Set(flat.map(entry => entry.sessionId))
     expect(ids.has('sess-a')).toBe(true)
     expect(ids.has('sess-b')).toBe(true)
     // Uploads persist under a content-hash prefix; match by suffix.
-    const png = flat.find((entry) => entry.name.endsWith('shot.png'))
-    const txt = flat.find((entry) => entry.name.endsWith('notes.txt'))
+    const png = flat.find(entry => entry.name.endsWith('shot.png'))
+    const txt = flat.find(entry => entry.name.endsWith('notes.txt'))
     expect(png?.kind).toBe('image')
     expect(png?.sizeBytes).toBe(PNG_BYTES.length)
     expect(txt?.kind).toBe('text')
@@ -122,7 +127,7 @@ describe('GET /api/filehub/library', () => {
   it('filters by q substring client-transparently', async () => {
     const handle = await startDomain([{ id: 'sess-a', cwd: cwdA }])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'alpha.txt', TEXT_BYTES)
     await upload(port, 'sess-a', 'beta.txt', TEXT_BYTES)
 
@@ -131,7 +136,7 @@ describe('GET /api/filehub/library', () => {
       path: '/api/filehub/library?q=alp',
     })
     const hitBody = JSON.parse(hit.text) as { sessions: Array<{ entries: Array<{ name: string }> }> }
-    const names = hitBody.sessions.flatMap((session) => session.entries.map((entry) => entry.name))
+    const names = hitBody.sessions.flatMap(session => session.entries.map(entry => entry.name))
     expect(names).toHaveLength(1)
     expect(names[0]?.endsWith('alpha.txt')).toBe(true)
   })
@@ -140,7 +145,7 @@ describe('GET /api/filehub/library', () => {
     // Session registered with the host, file placed manually (no upload → no meta).
     const handle = await startDomain([{ id: 'sess-orphan', cwd: cwdA }])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     const orphanDir = path.join(cwdA, '.filehub', 'manual')
     await fsp.mkdir(orphanDir, { recursive: true })
     await fsp.writeFile(path.join(orphanDir, 'stray.txt'), 'orphan bytes')
@@ -149,7 +154,7 @@ describe('GET /api/filehub/library', () => {
     const firstBody = JSON.parse(first.text) as {
       sessions: Array<{ sessionId: string; entries: Array<{ name: string; sizeBytes: number }> }>
     }
-    const firstNames = firstBody.sessions.flatMap((s) => s.entries.map((e) => e.name))
+    const firstNames = firstBody.sessions.flatMap(s => s.entries.map(e => e.name))
     expect(firstNames).toContain('stray.txt')
 
     // Second request still lists it — the backfill persisted into meta.
@@ -164,7 +169,7 @@ describe('GET /api/filehub/library', () => {
     await fsp.writeFile(path.join(orphanDir, 'later.txt'), 'later bytes')
     const third = await rawRequest(agent, port, { method: 'GET', path: '/api/filehub/library' })
     const thirdBody = JSON.parse(third.text) as { sessions: Array<{ entries: Array<{ name: string }> }> }
-    const thirdNames = thirdBody.sessions.flatMap((s) => s.entries.map((e) => e.name))
+    const thirdNames = thirdBody.sessions.flatMap(s => s.entries.map(e => e.name))
     expect(thirdNames).toContain('stray.txt')
     expect(thirdNames).not.toContain('later.txt')
   })
@@ -174,7 +179,7 @@ describe('GET /api/filehub/library', () => {
       console: { maxEntries: 1 },
     })
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'one.txt', TEXT_BYTES)
     await upload(port, 'sess-a', 'two.txt', TEXT_BYTES)
 
@@ -195,7 +200,7 @@ describe('GET /api/filehub/usage', () => {
       { id: 'sess-b', cwd: cwdB },
     ])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'pic.png', PNG_BYTES)
     await upload(port, 'sess-b', 'doc.pdf', PDF_BYTES)
     await upload(port, 'sess-b', 'plain.txt', TEXT_BYTES)
@@ -209,15 +214,15 @@ describe('GET /api/filehub/usage', () => {
       bySession: Array<{ sessionId: string; bytes: number }>
     }
     expect(body.files).toBe(3)
-    expect(body.byKind.image.files).toBe(1)
-    expect(body.byKind.image.bytes).toBe(PNG_BYTES.length)
-    expect(body.byKind.document.files).toBe(1) // pdf refines to document
-    expect(body.byKind.document.bytes).toBe(PDF_BYTES.length)
-    expect(body.byKind.text.files).toBe(1)
+    expect(body.byKind.image!.files).toBe(1)
+    expect(body.byKind.image!.bytes).toBe(PNG_BYTES.length)
+    expect(body.byKind.document!.files).toBe(1) // pdf refines to document
+    expect(body.byKind.document!.bytes).toBe(PDF_BYTES.length)
+    expect(body.byKind.text!.files).toBe(1)
     expect(body.totalBytes).toBe(PNG_BYTES.length + PDF_BYTES.length + TEXT_BYTES.length)
     // sess-b holds two files → strictly more bytes than sess-a.
     expect(body.bySession[0]?.sessionId).toBe('sess-b')
-    expect(body.bySession.map((row) => row.sessionId)).toContain('sess-a')
+    expect(body.bySession.map(row => row.sessionId)).toContain('sess-a')
   })
 })
 
@@ -228,14 +233,14 @@ describe('DELETE /api/filehub/session/:sessionId', () => {
       { id: 'sess-b', cwd: cwdB },
     ])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'kill-me.txt', TEXT_BYTES)
     await upload(port, 'sess-a', 'nested.txt', TEXT_BYTES, 'sub/nested.txt')
     await upload(port, 'sess-b', 'keep-me.txt', TEXT_BYTES)
 
     const flat = await fetchFlat()
-    const pathsA = flat.filter((entry) => entry.sessionId === 'sess-a').map((entry) => entry.path)
-    const pathB = flat.find((entry) => entry.sessionId === 'sess-b')?.path
+    const pathsA = flat.filter(entry => entry.sessionId === 'sess-a').map(entry => entry.path)
+    const pathB = flat.find(entry => entry.sessionId === 'sess-b')?.path
     expect(pathsA).toHaveLength(2)
     expect(pathB).toBeDefined()
 
@@ -268,7 +273,7 @@ describe('DELETE /api/filehub/session/:sessionId', () => {
   it('answers 400 for malformed session ids (containment gate)', async () => {
     const handle = await startDomain([{ id: 'sess-a', cwd: cwdA }])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     const response = await rawRequest(agent, port, {
       method: 'DELETE',
       path: `/api/filehub/session/${encodeURIComponent('../escape')}`,
@@ -279,7 +284,7 @@ describe('DELETE /api/filehub/session/:sessionId', () => {
   it('cleans up metadata so deleted files vanish from the library', async () => {
     const handle = await startDomain([{ id: 'sess-a', cwd: cwdA }])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'gone.txt', TEXT_BYTES)
     await rawRequest(agent, port, { method: 'DELETE', path: '/api/filehub/session/sess-a' })
     const library = await rawRequest(agent, port, { method: 'GET', path: '/api/filehub/library' })
@@ -295,7 +300,7 @@ describe('POST /api/filehub/cleanup (two-step)', () => {
       { id: 'sess-b', cwd: cwdB },
     ])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'old-one.txt', TEXT_BYTES)
     await upload(port, 'sess-b', 'old-two.png', PNG_BYTES)
 
@@ -356,7 +361,7 @@ describe('POST /api/filehub/cleanup (two-step)', () => {
       { id: 'sess-b', cwd: cwdB },
     ])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     await upload(port, 'sess-a', 'mine.txt', TEXT_BYTES)
     await upload(port, 'sess-b', 'theirs.txt', TEXT_BYTES)
 
@@ -369,8 +374,8 @@ describe('POST /api/filehub/cleanup (two-step)', () => {
     expect(missingId.status).toBe(400)
 
     const flat = await fetchFlat()
-    const minePath = flat.find((entry) => entry.sessionId === 'sess-a')?.path
-    const theirsPath = flat.find((entry) => entry.sessionId === 'sess-b')?.path
+    const minePath = flat.find(entry => entry.sessionId === 'sess-a')?.path
+    const theirsPath = flat.find(entry => entry.sessionId === 'sess-b')?.path
 
     const execute = await rawRequest(agent, port, {
       method: 'POST',
@@ -389,7 +394,7 @@ describe('POST /api/filehub/cleanup (two-step)', () => {
   it('answers 400 for invalid bodies', async () => {
     const handle = await startDomain([{ id: 'sess-a', cwd: cwdA }])
     port = handle.port
-    closeServer = handle.close
+    closeServer = () => handle.close()
     const badScope = await rawRequest(agent, port, {
       method: 'POST',
       path: '/api/filehub/cleanup',

@@ -21,7 +21,7 @@ describe('scanDraftTokens', () => {
   it('scans quoted tokens with spaces', () => {
     const tokens = scanDraftTokens('@"docs/my notes.md" end')
     expect(tokens[0]).toMatchObject({ value: 'docs/my notes.md', quoted: true })
-    expect(tokens[0].raw).toBe('@"docs/my notes.md"')
+    expect(tokens[0]!.raw).toBe('@"docs/my notes.md"')
   })
 
   it('ignores unterminated quotes', () => {
@@ -30,7 +30,7 @@ describe('scanDraftTokens', () => {
 
   it('handles multiple occurrences with independent spans', () => {
     const tokens = scanDraftTokens('@a @b @a')
-    expect(tokens.map((token) => token.value)).toEqual(['a', 'b', 'a'])
+    expect(tokens.map(token => token.value)).toEqual(['a', 'b', 'a'])
   })
 })
 
@@ -60,7 +60,7 @@ describe('removeDraftRange', () => {
   it('removes exactly one occurrence span', () => {
     const draft = 'look @a.md and @b.md'
     const [token] = scanDraftTokens(draft)
-    expect(removeDraftRange(draft, token.start, token.end)).toBe('look  and @b.md')
+    expect(removeDraftRange(draft, token!.start, token!.end)).toBe('look  and @b.md')
   })
 
   it('is a no-op outside valid bounds', () => {
@@ -73,6 +73,6 @@ describe('removeDraftRange', () => {
     const draft = '@a then @a'
     const tokens = scanDraftTokens(draft)
     const second = tokens[1]
-    expect(removeDraftRange(draft, second.start, second.end)).toBe('@a then ')
+    expect(removeDraftRange(draft, second!.start, second!.end)).toBe('@a then ')
   })
 })

@@ -28,7 +28,7 @@ function makeTransport(): { calls: ControlledCall[]; transport: (request: Outgoi
   const calls: ControlledCall[] = []
   return {
     calls,
-    transport: (request) =>
+    transport: request =>
       new Promise<UploadedFileResult>((resolve, reject) => {
         calls.push({ request, resolve, reject })
       }),
@@ -39,7 +39,7 @@ function makeFile(name: string, size = 10): File {
   return new File([new Uint8Array(size)], name)
 }
 
-const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
+const settle = (): Promise<void> => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 function mount(queue: UploadQueue): { container: HTMLDivElement; unmount: () => void } {
   const container = document.createElement('div')
@@ -86,8 +86,8 @@ describe('FileHubDock rendering', () => {
       { file: makeFile('virus.exe') },
       { file: makeFile('pending.bin') },
     ])
-    calls[0].resolve(RESULT)
-    calls[1].reject(new UploadHttpError(415))
+    calls[0]!.resolve(RESULT)
+    calls[1]!.reject(new UploadHttpError(415))
     await settle()
 
     const mounted = mount(queue)
@@ -102,7 +102,7 @@ describe('FileHubDock rendering', () => {
 
       // 415 is not retryable: no retry glyph anywhere; plain remove exists.
       const buttons = Array.from(mounted.container.querySelectorAll('button'))
-      expect(buttons.some((button) => button.textContent === '⟳')).toBe(false)
+      expect(buttons.some(button => button.textContent === '⟳')).toBe(false)
 
       // Uploading/pending rows carry a progressbar.
       expect(mounted.container.querySelectorAll('[role="progressbar"]')).toHaveLength(1)
@@ -116,20 +116,20 @@ describe('FileHubDock rendering', () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', concurrency: 2, transport })
     queue.enqueue([{ file: makeFile('a.bin') }, { file: makeFile('b.bin') }])
-    calls[0].reject(new UploadHttpError(507)) // retryable
-    calls[1].reject(new Error('offline')) // network → retryable
+    calls[0]!.reject(new UploadHttpError(507)) // retryable
+    calls[1]!.reject(new Error('offline')) // network → retryable
     await settle()
 
     const mounted = mount(queue)
     try {
       const retries = Array.from(mounted.container.querySelectorAll('button')).filter(
-        (button) => button.title === 'Retry',
+        button => button.title === 'Retry',
       )
       expect(retries).toHaveLength(2)
-      click(retries[0])
+      click(retries[0]!)
       await settle()
       // Retry re-dispatched the first row through the transport.
-      expect(queue.getItems().some((item) => item.status === 'uploading')).toBe(true)
+      expect(queue.getItems().some(item => item.status === 'uploading')).toBe(true)
     } finally {
       mounted.unmount()
     }
@@ -139,7 +139,7 @@ describe('FileHubDock rendering', () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
     queue.enqueue([{ file: makeFile('report.pdf', 64) }])
-    calls[0].resolve(RESULT)
+    calls[0]!.resolve(RESULT)
     await settle()
 
     const fetchMock = vi.fn(async () => ({ ok: true, status: 204 }) as Response)
@@ -148,7 +148,7 @@ describe('FileHubDock rendering', () => {
     const mounted = mount(queue)
     try {
       const remove = Array.from(mounted.container.querySelectorAll('button')).find(
-        (button) => button.title === 'Delete from workspace',
+        button => button.title === 'Delete from workspace',
       )
       expect(remove).toBeDefined()
       click(remove as HTMLButtonElement)
@@ -169,7 +169,7 @@ describe('FileHubDock rendering', () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
     queue.enqueue([{ file: makeFile('report.pdf', 64) }])
-    calls[0].resolve(RESULT)
+    calls[0]!.resolve(RESULT)
     await settle()
 
     vi.stubGlobal(
@@ -180,7 +180,7 @@ describe('FileHubDock rendering', () => {
     const mounted = mount(queue)
     try {
       const remove = Array.from(mounted.container.querySelectorAll('button')).find(
-        (button) => button.title === 'Delete from workspace',
+        button => button.title === 'Delete from workspace',
       ) as HTMLButtonElement
       click(remove)
       await settle()

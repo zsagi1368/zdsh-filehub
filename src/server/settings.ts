@@ -44,7 +44,8 @@ export const FILEHUB_SETTINGS_SCHEMA = z.object({
   'vision.mode': z.enum(['off', 'caption', 'analyze']),
 })
 export type FileHubSettings = z.infer<typeof FILEHUB_SETTINGS_SCHEMA>
-export type FileHubSettingsPatch = Partial<FileHubSettings>
+/** Patch shape with explicitly-optional keys (zod output carries | undefined). */
+export type FileHubSettingsPatch = { [K in keyof FileHubSettings]?: FileHubSettings[K] | undefined }
 
 export const FILEHUB_SETTINGS_DEFAULTS: Readonly<FileHubSettings> = Object.freeze({
   enabled: true,
@@ -93,12 +94,12 @@ const SETTINGS_TABLE = 'values'
 const SETTINGS_KEY = 'filehub'
 
 export interface SettingsStore {
-  load(): Promise<Partial<FileHubSettings>>
-  save(value: Partial<FileHubSettings>): Promise<void>
+  load(): Promise<FileHubSettingsPatch>
+  save(value: FileHubSettingsPatch): Promise<void>
 }
 
 export function createMemorySettingsStore(): SettingsStore {
-  let stored: Partial<FileHubSettings> = {}
+  let stored: FileHubSettingsPatch = {}
   return {
     async load() {
       return { ...stored }
@@ -126,14 +127,14 @@ class KvSettingsStore implements SettingsStore {
     return this.unitPromise
   }
 
-  async load(): Promise<Partial<FileHubSettings>> {
+  async load(): Promise<FileHubSettingsPatch> {
     const unit = await this.openUnit()
     const snapshot = await unit.loadAll()
     const raw = (snapshot.tables[SETTINGS_TABLE] ?? {})[SETTINGS_KEY]
-    return typeof raw === 'object' && raw !== null ? { ...(raw as Partial<FileHubSettings>) } : {}
+    return typeof raw === 'object' && raw !== null ? { ...(raw as FileHubSettingsPatch) } : {}
   }
 
-  async save(value: Partial<FileHubSettings>): Promise<void> {
+  async save(value: FileHubSettingsPatch): Promise<void> {
     const unit = await this.openUnit()
     await unit.putRecord(SETTINGS_TABLE, SETTINGS_KEY, value)
   }
@@ -174,7 +175,7 @@ export function createSettingsService(deps: SettingsServiceDeps): SettingsServic
   }
   const store: SettingsStore = kv ? new KvSettingsStore(kv) : createMemorySettingsStore()
 
-  async function readStored(): Promise<Partial<FileHubSettings>> {
+  async function readStored(): Promise<FileHubSettingsPatch> {
     try {
       return await store.load()
     } catch (error: unknown) {

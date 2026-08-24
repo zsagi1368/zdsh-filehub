@@ -54,7 +54,7 @@ function endOfSubtree(items: readonly PickerItem[], parentIndex: number): number
   const parent = items[parentIndex]
   if (!parent) return items.length
   let cursor = parentIndex + 1
-  while (cursor < items.length && items[cursor].depth > parent.depth) cursor += 1
+  while (cursor < items.length && (items[cursor]?.depth ?? 0) > parent.depth) cursor += 1
   return cursor
 }
 
@@ -79,6 +79,7 @@ export function reducePicker(state: PickerState, event: PickerEvent): PickerStat
       const parentIndex = indexOfHighlightedDirectory(state)
       if (parentIndex === undefined) return state
       const parent = state.items[parentIndex]
+      if (parent === undefined) return state
       const insertAt = parentIndex + 1
       const children: PickerItem[] = event.children.map((child) => ({
         relativePath: child.relativePath,

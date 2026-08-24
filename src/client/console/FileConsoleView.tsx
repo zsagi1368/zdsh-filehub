@@ -118,24 +118,25 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
 
   // Settings gate first; only an enabled feature loads data.
   useEffect(() => {
-    let cancelled = false
+    // Holder object defeats literal narrowing of the cancellation flag.
+    const state = { cancelled: false }
     void (async () => {
       try {
         const settings = await fetchConsoleSettings()
-        if (cancelled) return
+        if (state.cancelled) return
         if (!settings.enabled) {
           setGate({ stage: 'disabled' })
           return
         }
         setGate({ stage: 'open', defaultView: settings['console.defaultView'] })
       } catch (error: unknown) {
-        if (!cancelled) {
+        if (!state.cancelled) {
           setGate({ stage: 'error', message: error instanceof Error ? error.message : String(error) })
         }
       }
     })()
     return () => {
-      cancelled = true
+      state.cancelled = true
     }
   }, [])
 
@@ -203,8 +204,12 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
 
   const copyPath = async (): Promise<void> => {
     if (!selected) return
+    // Locally-widened clipboard face: jsdom and older browsers may omit it.
+    type ClipboardFace = { writeText(text: string): Promise<void> }
+    const clipboard = (navigator as Omit<Navigator, 'clipboard'> & { clipboard?: ClipboardFace }).clipboard
     try {
-      await navigator.clipboard?.writeText(selected.path)
+      if (clipboard === undefined) return
+      await clipboard.writeText(selected.path)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {

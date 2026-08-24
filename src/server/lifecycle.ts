@@ -289,7 +289,7 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
         })
       }, Math.max(1, intervalMs))
       // An unref'd timer must never keep the process (or a test run) alive.
-      timer.unref?.()
+      if (typeof timer.unref === 'function') timer.unref()
     },
     stop() {
       if (timer === undefined) return

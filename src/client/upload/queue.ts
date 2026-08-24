@@ -216,7 +216,7 @@ export function createXhrTransport(): UploadTransport {
         try {
           resolve(parseUploadResult(xhr.status, typeof xhr.responseText === 'string' ? xhr.responseText : ''))
         } catch (cause) {
-          reject(cause)
+          reject(cause instanceof Error ? cause : new Error(String(cause)))
         }
       }
       xhr.onerror = () => {
@@ -318,7 +318,10 @@ export class UploadQueue {
     }
     if (added.length === 0) return []
     for (let index = 0; index < added.length; index += 1) {
-      this.blobs.set(added[index].id, inputs[index].file)
+      const item = added[index]
+      const input = inputs[index]
+      if (item === undefined || input === undefined) continue
+      this.blobs.set(item.id, input.file)
     }
     this.items = [...this.items, ...added]
     this.emit()
@@ -349,7 +352,7 @@ export class UploadQueue {
     const index = this.items.findIndex((candidate) => candidate.id === id)
     if (index < 0) return false
     const item = this.items[index]
-    if (item.status === 'uploading') {
+    if (item !== undefined && item.status === 'uploading') {
       this.controllers.get(id)?.abort()
       this.controllers.delete(id)
     }
@@ -374,7 +377,9 @@ export class UploadQueue {
     const index = this.items.findIndex((candidate) => candidate.id === id)
     if (index < 0) return
     const next = [...this.items]
-    next[index] = { ...next[index], ...patch }
+    const current = next[index]
+    if (current === undefined) return
+    next[index] = { ...current, ...patch }
     // Progress events mutate frequently; keep identity stable when nothing changed.
     this.items = next
     this.emit()

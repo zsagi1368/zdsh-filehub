@@ -50,7 +50,7 @@ export function drainBody(req: IncomingMessage): Promise<void> {
       resolve()
     }
     const timer = setTimeout(finish, DRAIN_TIMEOUT_MS)
-    timer.unref?.()
+    if (typeof timer.unref === 'function') timer.unref()
     req.on('end', finish)
     req.on('close', finish)
     req.on('error', finish)

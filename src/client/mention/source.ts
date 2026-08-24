@@ -97,7 +97,7 @@ export function buildFileHubTriggerSource(deps: FileHubTriggerDeps = {}): InputT
     name: 'filehub',
     order: 20,
     showGroupTitle: true,
-    async candidates(session: ClientSessionContext, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]> {
+    async candidates(_session: ClientSessionContext, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]> {
       lastQuery = req.query
       try {
         // Prefer the explicit session projection; fall back to the seam used
@@ -115,8 +115,18 @@ export function buildFileHubTriggerSource(deps: FileHubTriggerDeps = {}): InputT
       } catch {
         parsed = undefined
       }
-      if (parsed === undefined || (parsed.k !== 'file' && parsed.k !== 'directory')) return undefined
-      const mention = formatMentionToken(parsed.p, parsed.k, pick.candidate.name.includes(' ') || lastQuery.endsWith('"'))
+      // Kind is matched against plain strings so hostile payloads cannot
+      // smuggle a value outside the file/directory vocabulary.
+      const kind: string | undefined = parsed?.k
+      if (parsed === undefined || (kind !== 'file' && kind !== 'directory')) {
+        return undefined
+      }
+      const quote = lastQuery.endsWith('"')
+      const mention = formatMentionToken(
+        parsed.p,
+        kind,
+        pick.candidate.name.includes(' ') || quote,
+      )
       if (mention === undefined) return undefined
       // Plain-text reference path (host replaces the token span with this).
       // Trailing space terminates the token; no `continue` — our candidates

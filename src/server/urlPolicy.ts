@@ -116,9 +116,9 @@ function expandIpv6(host: string): NormalizedIp | undefined {
   }
   const halves = text.split('::')
   if (halves.length > 2) return undefined
-  const left = halves[0] === '' ? [] : halves[0].split(':')
+  const left = halves[0] === '' ? [] : (halves[0] ?? '').split(':')
   const right =
-    halves.length === 2 ? (halves[1] === '' ? [] : halves[1].split(':')) : []
+    halves.length === 2 && halves[1] !== '' ? (halves[1] ?? '').split(':') : []
   if (halves.length === 1 && left.length !== 8) return undefined
   if (halves.length === 2 && left.length + right.length > 7) return undefined
   const fill = 8 - left.length - right.length

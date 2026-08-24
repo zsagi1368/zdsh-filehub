@@ -44,10 +44,10 @@ let workspaceRoot = ''
 
 async function start(): Promise<void> {
   const { domain, route } = makeDomain([{ id: 'sess-1', cwd }], defaultTestConfig())
-  disposeDomain = domain.dispose
+  disposeDomain = () => { domain.dispose() }
   const server = await startRouteServer(route)
   port = server.port
-  closeServer = server.close
+  closeServer = () => server.close()
   workspaceRoot = path.join(path.resolve(cwd), '.filehub')
 }
 
@@ -298,7 +298,7 @@ describe('round1: read_document symlink escapes', () => {
     const localCwd = await makeTempDir('adv-read-cwd')
     try {
       await fsp.mkdir(path.join(localCwd, '.filehub'), { recursive: true })
-      const [read] = toolsHarness().filter((tool) => tool.name === 'read_document')
+      const [read] = toolsHarness().filter(tool => tool.name === 'read_document')
       let linkPath = ''
       try {
         linkPath = path.join(localCwd, '.filehub', 'steal.txt')
@@ -308,12 +308,12 @@ describe('round1: read_document symlink escapes', () => {
         // still covers resolution; nothing further to prove physically.
       }
       if (linkPath !== '') {
-        await expect(read.execute({ path: 'steal.txt' }, execFor(localCwd))).rejects.toThrow(
+        await expect(read!.execute({ path: 'steal.txt' }, execFor(localCwd))).rejects.toThrow(
           /escapes the session workspace/,
         )
       }
       // Direct absolute-path request stays rejected too (lexical fence).
-      await expect(read.execute({ path: secret }, execFor(localCwd))).rejects.toThrow(
+      await expect(read!.execute({ path: secret }, execFor(localCwd))).rejects.toThrow(
         /escapes the session workspace/,
       )
     } finally {
@@ -384,14 +384,14 @@ describe('round1: race triangle (upload x delete x sweep)', () => {
         return () => undefined
       } },
     }
-    const live = createFileHubDomain(ctx as Parameters<typeof createFileHubDomain>[0], defaultTestConfig())
+    const live = createFileHubDomain(ctx, defaultTestConfig())
     const statuses: number[] = []
     const uploads = Array.from({ length: 12 }, (_, i) =>
       uploadRequest(agent, port, {
         sessionId: 'sess-1',
         fileName: `race-${i}.txt`,
         body: new Uint8Array(Buffer.from(`race payload ${i}`)),
-      }).then((res) => statuses.push(res.status)),
+      }).then(res => statuses.push(res.status)),
     )
     const deletes = Array.from({ length: 6 }, (_, i) =>
       uploadRequest(agent, port, {
@@ -399,14 +399,14 @@ describe('round1: race triangle (upload x delete x sweep)', () => {
         fileName: `race-${i}.txt`,
         body: new Uint8Array(Buffer.from(`race payload ${i}`)),
       })
-        .then((res) => JSON.parse(res.text) as { path?: string })
-        .then((parsed) =>
+        .then(res => JSON.parse(res.text) as { path?: string })
+        .then(parsed =>
           parsed.path === undefined
             ? undefined
             : rawRequest(agent, port, {
-                method: 'DELETE',
-                path: `/api/filehub/file?path=${encodeURIComponent(parsed.path)}`,
-              }).then((res) => statuses.push(res.status)),
+              method: 'DELETE',
+              path: `/api/filehub/file?path=${encodeURIComponent(parsed.path)}`,
+            }).then(res => statuses.push(res.status)),
         ),
     )
     const sweeps = [live.sweep(), live.sweep()]

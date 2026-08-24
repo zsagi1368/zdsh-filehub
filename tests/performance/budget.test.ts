@@ -127,9 +127,9 @@ describe('performance: 50 MiB upload memory peak', () => {
         },
       },
     )
-    disposeDomain = domain.dispose
+    disposeDomain = () => { domain.dispose() }
     const server = await startRouteServer(route)
-    closeServer = server.close
+    closeServer = () => server.close()
 
     const MIB = 1024 * 1024
     const body = new Uint8Array(50 * MIB)
@@ -182,7 +182,7 @@ describe('performance: console model at 5000 entries', () => {
       sessionId: `sess-${i % 7}`,
       sizeBytes: 100 + i,
       uploadedAtMs: 1_700_000_000_000 + i * 1000,
-      kind: (['image', 'document', 'text', 'binary', 'media'] as const)[i % 5],
+      kind: (['image', 'document', 'text', 'binary', 'media'] as const)[i % 5]!,
     }))
   }
 

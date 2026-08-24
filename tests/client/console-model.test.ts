@@ -35,21 +35,21 @@ const ENTRIES: ConsoleEntry[] = [
 
 describe('filtering', () => {
   it('matches by name and full path, case-insensitively', () => {
-    const report = ENTRIES[1]
+    const report = ENTRIES[1]!
     expect(matchesFilter(report, 'REP', 'all')).toBe(true)
     expect(matchesFilter(report, 'sub/', 'all')).toBe(true)
     expect(matchesFilter(report, 'zzz', 'all')).toBe(false)
   })
 
   it('kind chip excludes other kinds; "all" passes everything', () => {
-    expect(ENTRIES.filter((e) => matchesFilter(e, '', 'image'))).toHaveLength(1)
-    expect(ENTRIES.filter((e) => matchesFilter(e, '', 'text')).map((e) => e.kind)).toEqual(['text'])
+    expect(ENTRIES.filter(e => matchesFilter(e, '', 'image'))).toHaveLength(1)
+    expect(ENTRIES.filter(e => matchesFilter(e, '', 'text')).map(e => e.kind)).toEqual(['text'])
     expect(filterEntries(ENTRIES, '', 'all')).toHaveLength(3)
   })
 
   it('combines q + chip and sorts newest first', () => {
     const filtered = filterEntries([...ENTRIES].reverse(), '', 'all')
-    expect(filtered.map((e) => e.uploadedAtMs)).toEqual([900, 300, 100])
+    expect(filtered.map(e => e.uploadedAtMs)).toEqual([900, 300, 100])
     expect(filterEntries(ENTRIES, 'report', 'image')).toHaveLength(0)
     expect(filterEntries(ENTRIES, 'report', 'document')).toHaveLength(1)
   })
@@ -63,7 +63,7 @@ describe('filtering', () => {
       totalBytes: 20,
       truncated: false,
     }
-    expect(flattenLibrary(response).map((e) => e.sessionId)).toEqual(['recent', 'older'])
+    expect(flattenLibrary(response).map(e => e.sessionId)).toEqual(['recent', 'older'])
   })
 })
 
@@ -71,7 +71,7 @@ describe('buildRows', () => {
   it('flat mode emits one row per entry', () => {
     const rows = buildRows(ENTRIES, false)
     expect(rows).toHaveLength(3)
-    expect(rows.every((row) => row.type === 'entry')).toBe(true)
+    expect(rows.every(row => row.type === 'entry')).toBe(true)
   })
 
   it('grouped mode interleaves headers with correct count/bytes aggregates', () => {

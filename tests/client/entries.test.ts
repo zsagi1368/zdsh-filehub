@@ -22,7 +22,7 @@ function makeFile(name: string): File {
 
 function fileEntry(name: string): FileSystemEntryLike {
   const file = makeFile(name)
-  return { isFile: true, isDirectory: false, name, file: (ok) => ok(file) }
+  return { isFile: true, isDirectory: false, name, file: (ok) =>{  ok(file) } }
 }
 
 /** Directory entry whose reader yields one page per call (the browser contract: ≤100 per read). */
@@ -52,15 +52,15 @@ function item(entry: FileSystemEntryLike | null, kind = 'file'): DataTransferIte
 }
 
 function names(dropped: Awaited<ReturnType<typeof collectFromDataTransfer>>): string[] {
-  return dropped.map((entry) => `${entry.relativePath}:${entry.file.name}`)
+  return dropped.map(entry => `${entry.relativePath}:${entry.file.name}`)
 }
 
 describe('collectFromDataTransfer', () => {
   it('collects a single dropped file with its name as relative path', async () => {
     const dropped = await collectFromDataTransfer([item(fileEntry('a.txt'))])
     expect(dropped).toHaveLength(1)
-    expect(dropped[0].file.name).toBe('a.txt')
-    expect(dropped[0].relativePath).toBe('a.txt')
+    expect(dropped[0]!.file.name).toBe('a.txt')
+    expect(dropped[0]!.relativePath).toBe('a.txt')
   })
 
   it('drains directory readers until an EMPTY page (the ≤100-per-read pitfall)', async () => {
@@ -81,7 +81,7 @@ describe('collectFromDataTransfer', () => {
     const root = dirEntry('a', [[mid]])
     const dropped = await collectFromDataTransfer([item(root)])
     expect(dropped).toHaveLength(1)
-    expect(dropped[0].relativePath).toBe('a/b/c/f.txt')
+    expect(dropped[0]!.relativePath).toBe('a/b/c/f.txt')
   })
 
   it('contributes nothing for empty directories but still terminates', async () => {

@@ -38,7 +38,7 @@ function reasonOf(validation: MentionValidation): string {
 describe('scanMentionTokens', () => {
   it('matches word-initial tokens only', () => {
     const tokens = scanMentionTokens('see @src/app.ts and @docs')
-    expect(tokens.map((token) => token.value)).toEqual(['src/app.ts', 'docs'])
+    expect(tokens.map(token => token.value)).toEqual(['src/app.ts', 'docs'])
     expect(tokens[0]).toMatchObject({ start: 4, end: 15, quoted: false })
   })
 
@@ -62,7 +62,7 @@ describe('scanMentionTokens', () => {
   it('finds repeated tokens independently (multi occurrence)', () => {
     const tokens = scanMentionTokens('@a.md then @a.md again')
     expect(tokens).toHaveLength(2)
-    expect((tokens[1]?.start ?? 0)).toBeGreaterThan(tokens[0].start)
+    expect((tokens[1]?.start ?? 0)).toBeGreaterThan(tokens[0]!.start)
   })
 })
 
@@ -138,7 +138,7 @@ function makeEvents(): { registrations: Registration[]; on: (event: string, list
     on(event, listener) {
       registrations.push({ event, listener })
       return () => {
-        const index = registrations.findIndex((entry) => entry.event === event && entry.listener === listener)
+        const index = registrations.findIndex(entry => entry.event === event && entry.listener === listener)
         if (index >= 0) registrations.splice(index, 1)
       }
     },
@@ -165,7 +165,7 @@ async function runListener(
   payload: Record<string, unknown>,
   messages: unknown[],
 ): Promise<{ kind: string; messages?: unknown[] }> {
-  const registration = events.registrations.find((entry) => entry.event === 'agent/pre-step')
+  const registration = events.registrations.find(entry => entry.event === 'agent/pre-step')
   expect(registration).toBeDefined()
   const next = (): { kind: 'enter'; messages: unknown[] } => ({ kind: 'enter', messages })
   return (await registration?.listener(payload, next)) as { kind: string; messages?: unknown[] }
@@ -186,7 +186,7 @@ describe('mention injector (agent/pre-step seam)', () => {
     await fsp.mkdir(path.join(cwd, 'src'))
 
     const warns: string[] = []
-    const injector = createMentionInjector({ logWarn: (line) => warns.push(line) })
+    const injector = createMentionInjector({ logWarn: line => warns.push(line) })
     const events = makeEvents()
     injector.attach(events)
 
@@ -195,11 +195,11 @@ describe('mention injector (agent/pre-step seam)', () => {
     expect(decision.kind).toBe('enter')
     const modified = decision.messages?.[0] as typeof message
     // Original text byte-identical.
-    expect(modified.content[0].text).toBe('please review @report.md and @src')
+    expect(modified.content[0]!.text).toBe('please review @report.md and @src')
     // Exactly one appended block matching WorkspaceReferenceSchema shape.
     expect(modified.content).toHaveLength(2)
-    expect(modified.content[1].text).toContain('<workspace-reference path="report.md" kind="file" />')
-    expect(modified.content[1].text).toContain('<workspace-reference path="src" kind="directory" />')
+    expect(modified.content[1]!.text).toContain('<workspace-reference path="report.md" kind="file" />')
+    expect(modified.content[1]!.text).toContain('<workspace-reference path="src" kind="directory" />')
     // FR-B5 hard rule: CONTENT NEVER CROSSES THE WIRE.
     expect(JSON.stringify(decision.messages)).not.toContain('TOP SECRET CONTENT')
     expect(Object.isFrozen(modified)).toBe(true)
@@ -211,7 +211,7 @@ describe('mention injector (agent/pre-step seam)', () => {
     await fsp.writeFile(path.join(cwd, 'real.txt'), 'x')
 
     const warns: string[] = []
-    const injector = createMentionInjector({ logWarn: (line) => warns.push(line) })
+    const injector = createMentionInjector({ logWarn: line => warns.push(line) })
     const events = makeEvents()
     injector.attach(events)
 
@@ -254,9 +254,9 @@ describe('mention injector (agent/pre-step seam)', () => {
     const injector = createMentionInjector({ logWarn: () => undefined })
     const events = makeEvents()
     const detach = injector.attach(events)
-    const registration = events.registrations.find((entry) => entry.event === 'agent/pre-step')
+    const registration = events.registrations.find(entry => entry.event === 'agent/pre-step')
     const rejectingNext = (): { kind: 'reject' } => ({ kind: 'reject' })
-    const result = (await registration?.listener({ agent: fakeAgent(cwd), signal: new AbortController().signal }, rejectingNext)) as unknown
+    const result = (await registration?.listener({ agent: fakeAgent(cwd), signal: new AbortController().signal }, rejectingNext))
     expect(result).toEqual({ kind: 'reject' })
     detach()
     expect(events.registrations).toHaveLength(0)
@@ -299,10 +299,20 @@ class MockResponse {
   }
 }
 
-async function callSearch(handler: HttpHandler, query: string): Promise<{ status: number; body: any }> {
+/** Narrow view of the JSON search response the assertions traverse. */
+interface SearchView {
+  sessionId?: unknown
+  truncated?: unknown
+  entries?: Array<{ relativePath: string; sizeBytes?: number; uploadedAtMs?: number }>
+}
+
+async function callSearch(handler: HttpHandler, query: string): Promise<{ status: number; body: SearchView }> {
   const response = new MockResponse()
-  await handler(new MockRequest(`/api/filehub/search?${query}`) as any, response as any)
-  return { status: response.statusCode, body: JSON.parse(response.body || '{}') }
+  await handler(
+    new MockRequest(`/api/filehub/search?${query}`) as unknown as Parameters<HttpHandler>[0],
+    response as unknown as Parameters<HttpHandler>[1],
+  )
+  return { status: response.statusCode, body: JSON.parse(response.body || '{}') as SearchView }
 }
 
 describe('GET /api/filehub/search', () => {
@@ -336,13 +346,14 @@ describe('GET /api/filehub/search', () => {
       const { status, body } = await callSearch(handler, 'sessionId=s1&q=name')
       expect(status).toBe(200)
       expect(body.sessionId).toBe('s1')
-      const paths: string[] = body.entries.map((entry: { relativePath: string }) => entry.relativePath)
+      const entries = body.entries ?? []
+      const paths: string[] = entries.map(entry => entry.relativePath)
       expect(paths.indexOf('exact-name.ts')).toBe(0)
       expect(paths.indexOf('prefix-name.ts')).toBeGreaterThan(paths.indexOf('exact-name.ts'))
-      expect(paths.some((p: string) => p.endsWith('inner-name.ts'))).toBe(true)
+      expect(paths.some(p => p.endsWith('inner-name.ts'))).toBe(true)
       expect(paths).not.toContain('unrelated.doc')
       // Upload row keeps its metadata and the .filehub prefix.
-      const uploaded = body.entries.find((entry: { relativePath: string }) => entry.relativePath === '.filehub/exact-name.ts')
+      const uploaded = entries.find(entry => entry.relativePath === '.filehub/exact-name.ts')
       expect(uploaded?.sizeBytes).toBe(7)
       expect(uploaded?.uploadedAtMs).toBe(1234)
       expect(body.truncated).toBe(false)
@@ -382,8 +393,8 @@ describe('GET /api/filehub/search', () => {
       { entries: [{ relativePath: 'a.txt', kind: 'file' }] },
       { 'a.txt': { sizeBytes: 3, uploadedAtMs: 9 } },
     )
-    const uploadRow = merged.find((entry) => entry.relativePath === '.filehub/a.txt')
+    const uploadRow = merged.find(entry => entry.relativePath === '.filehub/a.txt')
     expect(uploadRow).toMatchObject({ sizeBytes: 3, kind: 'file', uploadedAtMs: 9 })
-    expect(merged.some((entry) => entry.relativePath === 'a.txt')).toBe(true)
+    expect(merged.some(entry => entry.relativePath === 'a.txt')).toBe(true)
   })
 })

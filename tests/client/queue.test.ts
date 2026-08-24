@@ -37,7 +37,7 @@ interface ControlledCall {
 
 function makeTransport(): { calls: ControlledCall[]; transport: UploadTransport } {
   const calls: ControlledCall[] = []
-  const transport: UploadTransport = (request) =>
+  const transport: UploadTransport = request =>
     new Promise<UploadedFileResult>((resolve, reject) => {
       calls.push({ request, resolve, reject })
     })
@@ -45,7 +45,7 @@ function makeTransport(): { calls: ControlledCall[]; transport: UploadTransport 
 }
 
 /** Drain the promise chain (.then/.finally/pump all settle in microtasks). */
-const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
+const settle = (): Promise<void> => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -63,7 +63,7 @@ describe('UploadQueue dispatch and concurrency', () => {
     ])
     expect(added).toHaveLength(4)
     expect(calls).toHaveLength(2)
-    const statuses = queue.getItems().map((item) => item.status)
+    const statuses = queue.getItems().map(item => item.status)
     expect(statuses).toEqual(['uploading', 'uploading', 'pending', 'pending'])
     expect(queue.stats()).toEqual({ total: 4, uploading: 2, pending: 2, done: 0, errored: 0 })
   })
@@ -73,11 +73,11 @@ describe('UploadQueue dispatch and concurrency', () => {
     const queue = new UploadQueue({ sessionId: () => 's1', concurrency: 1, transport })
     queue.enqueue([{ file: makeFile('a') }, { file: makeFile('b') }])
     expect(calls).toHaveLength(1)
-    calls[0].resolve(RESULT)
+    calls[0]!.resolve(RESULT)
     await settle()
-    expect(queue.getItems()[0].status).toBe('done')
+    expect(queue.getItems()[0]!.status).toBe('done')
     expect(calls).toHaveLength(2)
-    expect(queue.getItems()[1].status).toBe('uploading')
+    expect(queue.getItems()[1]!.status).toBe('uploading')
   })
 
   it('sends the wire contract: POST url, x-* headers, bare body', async () => {
@@ -90,7 +90,7 @@ describe('UploadQueue dispatch and concurrency', () => {
     const body = makeFile('photo.png', 16, 'image/png')
     queue.enqueue([{ file: body }])
     expect(calls).toHaveLength(1)
-    const { request } = calls[0]
+    const { request } = calls[0]!
     expect(request.url).toBe('/api/filehub/upload')
     expect(request.headers['x-session-id']).toBe('session-42')
     expect(request.headers['x-file-name']).toBe(encodeURIComponent('photo.png'))
@@ -98,9 +98,9 @@ describe('UploadQueue dispatch and concurrency', () => {
     expect(request.headers['content-type']).toBe('image/png')
     expect(request.body).toBe(body)
 
-    calls[0].resolve(RESULT)
+    calls[0]!.resolve(RESULT)
     await settle()
-    const [item] = queue.getItems()
+    const item = queue.getItems()[0]!
     expect(item.status).toBe('done')
     expect(item.result).toEqual(RESULT)
     expect(item.sentBytes).toBe(16)
@@ -115,7 +115,10 @@ describe('UploadQueue dispatch and concurrency', () => {
       { file: makeFile('./dot.txt'), relativePath: './dot.txt' },
       { file: new Blob([new Uint8Array(4)]) },
     ])
-    const [first, second, third, fourth] = queue.getItems()
+    const first = queue.getItems()[0]!
+    const second = queue.getItems()[1]!
+    const third = queue.getItems()[2]!
+    const fourth = queue.getItems()[3]!
     expect(first.name).toBe('report.txt')
     expect(first.relativePath).toBe('docs/sub/report.txt')
     expect(second.relativePath).toBe('a/b/win.txt')
@@ -123,7 +126,7 @@ describe('UploadQueue dispatch and concurrency', () => {
     expect(third.relativePath).toBe('dot.txt')
     expect(fourth.name).toBe('blob')
     expect(fourth.sizeBytes).toBe(4)
-    expect(calls[3].request.headers['x-file-relpath']).toBe(encodeURIComponent(''))
+    expect(calls[3]!.request.headers['x-file-relpath']).toBe(encodeURIComponent(''))
   })
 })
 
@@ -133,15 +136,15 @@ describe('UploadQueue progress callbacks', () => {
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
     queue.enqueue([{ file: makeFile('big.bin', 10) }])
     const versions: number[] = []
-    const unsubscribe = queue.subscribe(() => versions.push(queue.getItems()[0].sentBytes))
-    calls[0].request.onProgress(3)
-    calls[0].request.onProgress(7)
+    const unsubscribe = queue.subscribe(() => versions.push(queue.getItems()[0]!.sentBytes))
+    calls[0]!.request.onProgress(3)
+    calls[0]!.request.onProgress(7)
     unsubscribe()
-    expect(queue.getItems()[0].sentBytes).toBe(7)
+    expect(queue.getItems()[0]!.sentBytes).toBe(7)
     expect(versions).toEqual([3, 7])
-    calls[0].resolve(RESULT)
+    calls[0]!.resolve(RESULT)
     await settle()
-    expect(queue.getItems()[0].sentBytes).toBe(10)
+    expect(queue.getItems()[0]!.sentBytes).toBe(10)
     // After unsubscribe the late mutation must not notify again.
     expect(versions).toEqual([3, 7])
   })
@@ -149,11 +152,11 @@ describe('UploadQueue progress callbacks', () => {
   it('ignores progress arriving after cancellation', async () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
-    const [item] = queue.enqueue([{ file: makeFile('x.bin', 10) }])
-    calls[0].request.signal.addEventListener('abort', () => {})
+    const item = queue.enqueue([{ file: makeFile('slow.bin') }])[0]!
+    calls[0]!.request.signal.addEventListener('abort', () => {})
     queue.cancel(item.id)
-    expect(calls[0].request.signal.aborted).toBe(true)
-    calls[0].request.onProgress(9)
+    expect(calls[0]!.request.signal.aborted).toBe(true)
+    calls[0]!.request.onProgress(9)
     expect(queue.getItems()[0]?.sentBytes ?? -1).toBeLessThan(9)
   })
 })
@@ -179,14 +182,14 @@ describe('UploadQueue failure mapping', () => {
       const { calls, transport } = makeTransport()
       const queue = new UploadQueue({ sessionId: () => 's1', transport })
       queue.enqueue([{ file: makeFile('f.bin') }])
-      calls[0].reject(new UploadHttpError(example.status))
+      calls[0]!.reject(new UploadHttpError(example.status))
       await settle()
       // Read through getItems(): enqueue returns pre-dispatch snapshots and
       // the queue replaces rows immutably on every patch.
-      expect(queue.getItems()[0].status).toBe('error')
-      expect(queue.getItems()[0].error?.code).toBe(example.code)
-      expect(queue.getItems()[0].error?.httpStatus).toBe(example.status)
-      expect(queue.getItems()[0].error?.retryable).toBe(example.retryable)
+      expect(queue.getItems()[0]!.status).toBe('error')
+      expect(queue.getItems()[0]!.error?.code).toBe(example.code)
+      expect(queue.getItems()[0]!.error?.httpStatus).toBe(example.status)
+      expect(queue.getItems()[0]!.error?.retryable).toBe(example.retryable)
     })
   }
 
@@ -194,13 +197,13 @@ describe('UploadQueue failure mapping', () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
     queue.enqueue([{ file: makeFile('one') }, { file: makeFile('two') }])
-    calls[0].reject(new UploadResponseError('bad json'))
-    calls[1].reject(new Error('socket reset'))
+    calls[0]!.reject(new UploadResponseError('bad json'))
+    calls[1]!.reject(new Error('socket reset'))
     await settle()
-    expect(queue.getItems()[0].error?.code).toBe('invalidResponse')
-    expect(queue.getItems()[0].error?.retryable).toBe(false)
-    expect(queue.getItems()[1].error?.code).toBe('network')
-    expect(queue.getItems()[1].error?.retryable).toBe(true)
+    expect(queue.getItems()[0]!.error?.code).toBe('invalidResponse')
+    expect(queue.getItems()[0]!.error?.retryable).toBe(false)
+    expect(queue.getItems()[1]!.error?.code).toBe('network')
+    expect(queue.getItems()[1]!.error?.retryable).toBe(true)
   })
 
   it('exposes bilingual human copy for every error code', () => {
@@ -221,18 +224,18 @@ describe('UploadQueue session readiness', () => {
     const { calls, transport } = makeTransport()
     let sessionId: string | null = null
     const queue = new UploadQueue({ sessionId: () => sessionId, transport })
-    const [item] = queue.enqueue([{ file: makeFile('f') }])
+    const item = queue.enqueue([{ file: makeFile('later.bin') }])[0]!
     expect(calls).toHaveLength(0)
-    expect(queue.getItems()[0].status).toBe('error')
-    expect(queue.getItems()[0].error?.code).toBe('sessionMissing')
-    expect(queue.getItems()[0].error?.retryable).toBe(true)
+    expect(queue.getItems()[0]!.status).toBe('error')
+    expect(queue.getItems()[0]!.error?.code).toBe('sessionMissing')
+    expect(queue.getItems()[0]!.error?.retryable).toBe(true)
 
     sessionId = 'later-session'
     expect(queue.retry(item.id)).toBe(true)
     await settle()
     expect(calls).toHaveLength(1)
-    expect(calls[0].request.headers['x-session-id']).toBe('later-session')
-    expect(queue.getItems()[0].status).toBe('uploading')
+    expect(calls[0]!.request.headers['x-session-id']).toBe('later-session')
+    expect(queue.getItems()[0]!.status).toBe('uploading')
   })
 })
 
@@ -240,13 +243,13 @@ describe('UploadQueue cancel / remove / retry / clear', () => {
   it('cancel aborts the signal and parks the row as cancelled', async () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
-    const [item] = queue.enqueue([{ file: makeFile('a') }])
+    const item = queue.enqueue([{ file: makeFile('cancel.bin') }])[0]!
     expect(queue.cancel(item.id)).toBe(true)
-    expect(calls[0].request.signal.aborted).toBe(true)
-    calls[0].reject(makeAbortError())
+    expect(calls[0]!.request.signal.aborted).toBe(true)
+    calls[0]!.reject(makeAbortError())
     await settle()
     expect(queue.getItems()).toHaveLength(1)
-    expect(queue.getItems()[0].status).toBe('cancelled')
+    expect(queue.getItems()[0]!.status).toBe('cancelled')
   })
 
   it('retries cancelled and errored items; retry is a no-op elsewhere', async () => {
@@ -258,40 +261,40 @@ describe('UploadQueue cancel / remove / retry / clear', () => {
       { file: makeFile('c') },
     ])
     expect(calls).toHaveLength(1)
-    calls[0].reject(new UploadHttpError(507))
+    calls[0]!.reject(new UploadHttpError(507))
     await settle()
     expect(calls).toHaveLength(2) // second row auto-started
-    calls[1].resolve(RESULT)
+    calls[1]!.resolve(RESULT)
     await settle()
-    expect(queue.retry(second.id)).toBe(false) // done
-    expect(queue.retry(third.id)).toBe(false) // uploading
-    expect(queue.retry(first.id)).toBe(true) // error → pending
+    expect(queue.retry(second!.id)).toBe(false) // done
+    expect(queue.retry(third!.id)).toBe(false) // uploading
+    expect(queue.retry(first!.id)).toBe(true) // error → pending
     await settle()
     // Concurrency 1: first waits behind the in-flight third row.
     expect(calls).toHaveLength(3)
-    expect(queue.getItems()[0].status).toBe('pending')
+    expect(queue.getItems()[0]!.status).toBe('pending')
     // Cancel the in-flight third row; its slot frees and the waiting first
     // row takes it immediately.
-    expect(queue.cancel(third.id)).toBe(true)
-    expect(calls[2].request.signal.aborted).toBe(true)
-    calls[2].reject(makeAbortError())
+    expect(queue.cancel(third!.id)).toBe(true)
+    expect(calls[2]!.request.signal.aborted).toBe(true)
+    calls[2]!.reject(makeAbortError())
     await settle()
-    expect(queue.getItems()[2].status).toBe('cancelled')
-    expect(queue.getItems()[0].status).toBe('uploading')
+    expect(queue.getItems()[2]!.status).toBe('cancelled')
+    expect(queue.getItems()[0]!.status).toBe('uploading')
     expect(calls).toHaveLength(4)
     // Cancelled rows accept retry too (stays queued while the slot is busy).
-    expect(queue.retry(queue.getItems()[2].id)).toBe(true)
+    expect(queue.retry(queue.getItems()[2]!.id)).toBe(true)
     await settle()
-    expect(queue.getItems()[2].status).toBe('pending')
+    expect(queue.getItems()[2]!.status).toBe('pending')
   })
 
   it('remove during flight drops the row and swallows the late rejection', async () => {
     const { calls, transport } = makeTransport()
     const queue = new UploadQueue({ sessionId: () => 's1', transport })
-    const [item] = queue.enqueue([{ file: makeFile('a') }])
+    const item = queue.enqueue([{ file: makeFile('gone.bin') }])[0]!
     expect(queue.remove(item.id)).toBe(true)
     expect(queue.getItems()).toHaveLength(0)
-    expect(() => calls[0].reject(makeAbortError())).not.toThrow()
+    expect(() =>{  calls[0]!.reject(makeAbortError()) }).not.toThrow()
     await settle()
     expect(queue.getItems()).toHaveLength(0)
     expect(queue.remove(item.id)).toBe(false)
@@ -307,7 +310,7 @@ describe('UploadQueue cancel / remove / retry / clear', () => {
     ])
     queue.clear()
     expect(queue.getItems()).toHaveLength(0)
-    expect(calls.every((call) => call.request.signal.aborted)).toBe(true)
+    expect(calls.every(call => call.request.signal.aborted)).toBe(true)
     expect(queue.stats().total).toBe(0)
   })
 })
@@ -353,10 +356,10 @@ describe('createXhrTransport (default transport)', () => {
       url: '/api/filehub/upload',
       body: new Blob([new Uint8Array(4)]),
       headers: { 'x-session-id': 's9', 'content-type': 'text/plain' },
-      onProgress: (loaded) => progress.push(loaded),
+      onProgress: loaded => progress.push(loaded),
       signal: new AbortController().signal,
     })
-    const xhr = FakeXhr.instances[0]
+    const xhr = FakeXhr.instances[0]!
     expect(xhr.open).toHaveBeenCalledWith('POST', '/api/filehub/upload')
     expect(xhr.setRequestHeader).toHaveBeenCalledWith('x-session-id', 's9')
     expect(xhr.setRequestHeader).toHaveBeenCalledWith('content-type', 'text/plain')
@@ -369,7 +372,7 @@ describe('createXhrTransport (default transport)', () => {
   it('surfaces HTTP failures as UploadHttpError carrying the status', async () => {
     install()
     const promise = createXhrTransport()(emptyRequest())
-    FakeXhr.instances[0].respond(413, 'too big')
+    FakeXhr.instances[0]!.respond(413, 'too big')
     const cause = await promise.catch((error: unknown) => error)
     expect(cause).toBeInstanceOf(UploadHttpError)
     expect((cause as UploadHttpError).status).toBe(413)
@@ -378,7 +381,7 @@ describe('createXhrTransport (default transport)', () => {
   it('maps non-JSON 2xx bodies to UploadResponseError', async () => {
     install()
     const promise = createXhrTransport()(emptyRequest())
-    FakeXhr.instances[0].respond(200, '<html>not json</html>')
+    FakeXhr.instances[0]!.respond(200, '<html>not json</html>')
     const cause = await promise.catch((error: unknown) => error)
     expect(cause).toBeInstanceOf(UploadResponseError)
   })
@@ -387,7 +390,7 @@ describe('createXhrTransport (default transport)', () => {
     install()
     const controller = new AbortController()
     const promise = createXhrTransport()(emptyRequest(controller.signal))
-    const xhr = FakeXhr.instances[0]
+    const xhr = FakeXhr.instances[0]!
     controller.abort()
     const cause = await promise.catch((error: unknown) => error)
     expect(xhr.abortCount).toBe(1)
@@ -397,7 +400,7 @@ describe('createXhrTransport (default transport)', () => {
   it('rejects with a network error on xhr.onerror', async () => {
     install()
     const promise = createXhrTransport()(emptyRequest())
-    FakeXhr.instances[0].onerror?.()
+    FakeXhr.instances[0]!.onerror?.()
     const cause = await promise.catch((error: unknown) => error)
     expect((cause as Error).message).toContain('network')
   })
