@@ -1,9 +1,8 @@
 # Security Policy
 
-zDSH FileHub handles user files. Its security specification is versioned with the
-design docs (`PluginR&D/plan/filehub/P01` §9). Per that spec's S-4 rule, every
-claim below is **implemented and verified**: each row cites the test files and
-named cases that prove it. Claims are never added ahead of their tests.
+zDSH FileHub handles user files, so every security claim in this file is
+**implemented and verified**: each row cites the test files and named cases
+that prove it. Claims are never added ahead of their tests.
 
 ## Implemented & verified
 
@@ -133,7 +132,7 @@ metadata only after a successful waterfall run.
 Evidence: `tests/server/vision.test.ts` (privacy gate, degradation, cache
 dedupe cases), `tests/server/caption-passthrough.test.ts` (caption chain).
 
-### Adversarial validation (P01 §12)
+### Adversarial validation
 
 Three red-team rounds were executed on 2026-08-24; five successful attacks
 (junction write/delete/read escapes, redirect-hop SSRF, KV ghost entries) were

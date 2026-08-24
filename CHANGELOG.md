@@ -5,8 +5,7 @@ Keep a Changelog; versioning is SemVer.
 
 ## [0.1.0] - 2026-08-24
 
-First public release. Clean-room implementation (zero community code reuse);
-design specs: fork repo `PluginR&D/plan/filehub/P01`.
+First public release.
 
 ### Added
 
