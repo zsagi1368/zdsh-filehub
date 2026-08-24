@@ -44,7 +44,6 @@ import { parseDocument, ParseAbortedError } from './parse/waterfall.js'
 import { sniff } from '../detect.js'
 import { assertInside, isStrictlyInside } from './pathPolicy.js'
 import type { DocumentFormat, DocumentOverview } from './parse/types.js'
-import type { LoggerLike } from '../index.js'
 
 // ---------------------------------------------------------------------------
 // Structural seams over the host services (verified shapes, see header note).
@@ -153,13 +152,13 @@ export function resolveBudgets(overrides?: Partial<ReadingBudgets>): ReadingBudg
 }
 
 function budgetFor(budgets: ReadingBudgets, format: DocumentFormat): number {
-  return budgets[format] ?? DEFAULT_BUDGETS.text
+  return format in budgets ? budgets[format] : DEFAULT_BUDGETS.text
 }
 
 export const TRUNCATION_MARKER_PREFIX = '[truncated at char '
 
 /** Explicit continuation guidance appended whenever a window cut content. */
-export function truncationMarker(start: number, end: number, total: number): string {
+export function truncationMarker(_start: number, end: number, total: number): string {
   return `${TRUNCATION_MARKER_PREFIX}${end} of total ${total} — call again with offset=${end}]`
 }
 
@@ -224,11 +223,11 @@ export function resolveWorkspaceTarget(
 
 export interface ReadingToolsDeps {
   /** Optional; defaults to a no-op sink when the host logger is absent. */
-  logWarn?(message: string): void
+  logWarn?: (message: string) => void
   /** Upload-workspace directory name under the session cwd. */
   storageDirName?: string
   cache?: ParseCache
-  budgets?: Partial<ReadingBudgets>
+  budgets?: Partial<ReadingBudgets> | undefined
 }
 
 const READ_DOCUMENT_TIMEOUT_MS = 120_000
@@ -242,7 +241,7 @@ interface ReadDocumentArgs {
 }
 
 function coerceArgs(raw: unknown): ReadDocumentArgs {
-  return typeof raw === 'object' && raw !== null ? (raw as ReadDocumentArgs) : {}
+  return typeof raw === 'object' && raw !== null ? (raw) : {}
 }
 
 function requireString(value: unknown, name: string): string {
@@ -445,19 +444,19 @@ export function registerReadingTools(
             const body = v.probe
               ? buildProbeBody({ path: v.path, format: v.format, overview: v.overview ?? { format: v.format } })
               : buildDocumentBody({
-                  path: v.path,
-                  format: v.format,
-                  window: {
-                    slice: v.text ?? '',
-                    start: v.offset,
-                    end: v.offset + (v.text?.length ?? 0),
-                    total: v.totalChars,
-                    truncated: v.continuationHint !== undefined,
-                    ...(v.continuationHint !== undefined
-                      ? { marker: `[truncated at char ${v.offset + (v.text?.length ?? 0)} of total ${v.totalChars} — call again with offset=${v.offset + (v.text?.length ?? 0)}]` }
-                      : {}),
-                  },
-                })
+                path: v.path,
+                format: v.format,
+                window: {
+                  slice: v.text ?? '',
+                  start: v.offset,
+                  end: v.offset + (v.text?.length ?? 0),
+                  total: v.totalChars,
+                  truncated: v.continuationHint !== undefined,
+                  ...(v.continuationHint !== undefined
+                    ? { marker: `[truncated at char ${v.offset + (v.text?.length ?? 0)} of total ${v.totalChars} — call again with offset=${v.offset + (v.text?.length ?? 0)}]` }
+                    : {}),
+                },
+              })
             return [{ type: 'text', text: body }]
           },
           presentationMeta: (_args, rawValue) => {
@@ -486,11 +485,11 @@ export function registerReadingTools(
               ...(overview.pageCount !== undefined ? { pageCount: overview.pageCount } : {}),
               ...(overview.sheetNames !== undefined
                 ? {
-                    sheets: overview.sheetNames.map((name: string, i: number) => ({
-                      name,
-                      ...(overview.sheetDimensions?.[i] ?? {}),
-                    })),
-                  }
+                  sheets: overview.sheetNames.map((name: string, i: number) => ({
+                    name,
+                    ...(overview.sheetDimensions?.[i] ?? {}),
+                  })),
+                }
                 : {}),
               ...(overview.paragraphCount !== undefined ? { paragraphCount: overview.paragraphCount } : {}),
             }
@@ -556,9 +555,9 @@ export function registerReadingTools(
             text: window_.slice,
             ...(window_.truncated
               ? {
-                  continuationHint: `call read_document with offset=${window_.end}` +
+                continuationHint: `call read_document with offset=${window_.end}` +
                     (doc.format === 'xlsx' && sheet !== undefined ? ` and sheet: ${JSON.stringify(sheet)}` : ''),
-                }
+              }
               : {}),
             overview: doc.overview as unknown as JsonValue,
           }
@@ -622,7 +621,7 @@ export function registerReadingTools(
           },
           render: (_args, value) => {
             const v = value as { entries: Array<{ path: string; kind: string; sizeBytes: number }>; truncated: boolean; total: number }
-            const lines = v.entries.map((entry) => `- ${entry.path} (${entry.kind}, ${entry.sizeBytes} bytes)`)
+            const lines = v.entries.map(entry => `- ${entry.path} (${entry.kind}, ${entry.sizeBytes} bytes)`)
             if (v.truncated) lines.push(`[truncated — showing ${v.entries.length} of at least ${v.total} entries]`)
             if (lines.length === 0) lines.push('(workspace is empty)')
             return [{ type: 'text', text: lines.join('\n') }]
@@ -684,7 +683,7 @@ export function registerReadingTools(
 
           collected.sort((a, b) => (a.relPath < b.relPath ? -1 : 1))
           return {
-            entries: collected.map((entry) => ({
+            entries: collected.map(entry => ({
               path: entry.relPath,
               kind: entry.isDirectory ? 'directory' : 'file',
               sizeBytes: entry.sizeBytes,

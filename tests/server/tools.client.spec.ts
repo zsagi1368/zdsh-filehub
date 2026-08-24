@@ -20,8 +20,8 @@ import type {
   ToolRunContextLike,
 } from '../../src/server/tools.js'
 import { ParseCache } from '../../src/server/parse/cache.js'
-import { makeDocx, makePdf, makeXlsx } from './parse/zipFixture.js'
-import { removeTempDir } from './helpers.js'
+import { makeDocx, makePdf, makeXlsx } from './parse/zipFixture.client.js'
+import { removeTempDir } from './helpers.client.js'
 
 // ---- Harness ----------------------------------------------------------------
 
@@ -56,7 +56,7 @@ function execFor(cwd: string, signal = new AbortController().signal): ToolRunCon
 }
 
 function toolOf(captured: Captured, name: string): FilehubToolDefinition {
-  const found = captured.tools.find((t) => t.name === name)
+  const found = captured.tools.find(t => t.name === name)
   if (!found) throw new Error(`tool ${name} not registered`)
   return found
 }
@@ -87,7 +87,7 @@ async function makeWorkspace(): Promise<{ cwd: string; root: string }> {
 describe('registration', () => {
   it('registers both tools plus one system-prompt section', () => {
     const { captured, disposers } = registerHarness()
-    expect(captured.tools.map((t) => t.name).sort()).toEqual(['list_workspace_files', 'read_document'])
+    expect(captured.tools.map(t => t.name).sort()).toEqual(['list_workspace_files', 'read_document'])
     expect(captured.sections).toHaveLength(1)
     expect(captured.sections[0]?.name).toBe('filehub-document-reading')
     // Order 110 sits inside the tool-guidance band (100-199), clear of
@@ -106,7 +106,7 @@ describe('registration', () => {
     expect(read.parameters?.path).toMatchObject({ type: 'string', required: true })
     expect(read.timeoutMs).toBe(120_000)
     expect(read.isConcurrencySafe?.({})).toBe(true)
-    expect(read.output.presentationMeta).toBeTypeOf('function')
+    expect(typeof read.output.presentationMeta).toBe('function')
 
     const list = toolOf(captured, 'list_workspace_files')
     expect(list.parameters).toEqual({}) // implicit open object root, no properties
@@ -136,7 +136,7 @@ describe('read_document / format happy paths', () => {
     expect(value.truncated).toBe(false)
     expect(value.path).toBe(stored)
 
-    const rendered = read.output.render({ path: 'notes.txt' }, value as never)
+    const rendered = read.output.render({ path: 'notes.txt' }, value)
     expect(rendered).toHaveLength(1)
     expect(rendered[0]?.type).toBe('text')
     expect(rendered[0]?.text).toContain('<document path=')
@@ -297,7 +297,7 @@ describe('read_document / budgets and continuation', () => {
     expect(first.totalChars).toBe(20_000)
     expect(first.continuationHint).toContain('offset=8000')
 
-    const renderedFirst = read.output.render({ path: 'long.txt' }, first as never)[0]?.text ?? ''
+    const renderedFirst = read.output.render({ path: 'long.txt' }, first)[0]?.text ?? ''
     const markerMatch = /\[truncated at char (\d+) of total (\d+) — call again with offset=(\d+)\]/.exec(renderedFirst)
     expect(markerMatch).not.toBeNull()
 
@@ -326,7 +326,7 @@ describe('read_document / budgets and continuation', () => {
 
   it('clamps limit to the per-format budget', async () => {
     const { cwd, root } = await makeWorkspace()
-    await writeBytes(root, 'big.pdf', makePdf([`${'word '.repeat(4000)}`]))
+    await writeBytes(root, 'big.pdf', makePdf(['word '.repeat(4000)]))
     const { captured } = registerHarness()
     const read = toolOf(captured, 'read_document')
     const greedy = (await read.execute({ path: 'big.pdf', limit: 999_999 }, execFor(cwd))) as {
@@ -417,11 +417,11 @@ describe('list_workspace_files', () => {
       truncated: boolean
       total: number
     }
-    expect(value.entries.map((e) => e.path)).toEqual(['b.txt', 'empty-dir', 'sub', 'sub/a.txt'])
-    expect(value.entries.find((e) => e.path === 'b.txt')).toMatchObject({ kind: 'file', sizeBytes: 5 })
-    expect(value.entries.find((e) => e.path === 'empty-dir')).toMatchObject({ kind: 'directory' })
+    expect(value.entries.map(e => e.path)).toEqual(['b.txt', 'empty-dir', 'sub', 'sub/a.txt'])
+    expect(value.entries.find(e => e.path === 'b.txt')).toMatchObject({ kind: 'file', sizeBytes: 5 })
+    expect(value.entries.find(e => e.path === 'empty-dir')).toMatchObject({ kind: 'directory' })
     expect(value.truncated).toBe(false)
-    const rendered = list.output.render({}, value as never)[0]
+    const rendered = list.output.render({}, value)[0]
     expect(rendered?.text).toContain('- b.txt (file, 5 bytes)')
   })
 
@@ -470,7 +470,7 @@ describe('presenters', () => {
     expect(callView).toMatchObject({ card: 'generic', title: 'Read document view.txt', kind: 'read' })
 
     const value = (await read.execute({ path: 'view.txt' }, execFor(cwd)))
-    const content = read.output.render({ path: 'view.txt' }, value as never)
+    const content = read.output.render({ path: 'view.txt' }, value)
     const resultView = read.presentResult?.({ path: 'view.txt' }, {
       content,
       isError: false,

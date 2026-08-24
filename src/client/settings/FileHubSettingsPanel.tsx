@@ -26,7 +26,6 @@ import {
   beginSave,
   createSettingsForm,
   editValue,
-  isDirty,
   resetValues,
   saveFailed,
   saveSucceeded,
@@ -43,7 +42,7 @@ const SAVE_FLASH_MS = 1600
 
 export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNode {
   const [loaded, setLoaded] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [, setLoadError] = useState<string | null>(null)
   const [form, setForm] = useState<SettingsFormState>(() => createSettingsForm({ ...SETTINGS_DEFAULTS }))
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   // Latest-state mirror so edit handlers can compute the next machine state
@@ -53,27 +52,28 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
 
   useEffect(() => {
     injectStylesOnce('zdsh-filehub-console-styles', CONSOLE_STYLES)
-    return () => clearTimeout(flashTimer.current)
+    return () =>{  clearTimeout(flashTimer.current) }
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    // Holder object defeats literal narrowing of the cancellation flag.
+    const state = { cancelled: false }
     void (async () => {
       try {
         const settings = await fetchConsoleSettings()
-        if (!cancelled) {
+        if (!state.cancelled) {
           setForm(createSettingsForm(settings))
           setLoaded(true)
         }
       } catch (error: unknown) {
-        if (!cancelled) {
+        if (!state.cancelled) {
           setLoadError(error instanceof Error ? error.message : String(error))
           setLoaded(true)
         }
       }
     })()
     return () => {
-      cancelled = true
+      state.cancelled = true
     }
   }, [])
 
@@ -81,13 +81,13 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
     setForm(beginSave(next))
     try {
       const saved = await putConsoleSettings(next.values)
-      setForm((current) => saveSucceeded(current, saved))
+      setForm(current => saveSucceeded(current, saved))
       clearTimeout(flashTimer.current)
       flashTimer.current = setTimeout(() => {
-        setForm((current) => (current.status === 'saved' ? { ...current, status: 'idle' } : current))
+        setForm(current => (current.status === 'saved' ? { ...current, status: 'idle' } : current))
       }, SAVE_FLASH_MS)
     } catch (error: unknown) {
-      setForm((current) =>
+      setForm(current =>
         saveFailed(current, error instanceof Error ? error.message : String(error)),
       )
     }
@@ -135,7 +135,7 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
             <Switch
               checked={form.values.enabled}
               label={t('settings.enabled')}
-              onChange={(value) => onEdit('enabled', value)}
+              onChange={(value) =>{  onEdit('enabled', value) }}
             />
           }
         />
@@ -146,7 +146,7 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
             <Switch
               checked={form.values.ignorePastedMentions}
               label={t('settings.ignorePastedMentions')}
-              onChange={(value) => onEdit('ignorePastedMentions', value)}
+              onChange={(value) =>{  onEdit('ignorePastedMentions', value) }}
             />
           }
         />
@@ -174,11 +174,11 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
             <select
               className="zdsh-filehub-select"
               value={form.values['console.defaultView']}
-              onChange={(event) =>
+              onChange={(event) =>{
                 onEdit(
                   'console.defaultView',
                   event.target.value === 'flat' ? 'flat' : 'grouped',
-                )
+                ) }
               }
             >
               <option value="grouped">{t('settings.defaultView.grouped')}</option>
@@ -197,7 +197,7 @@ export function FileHubSettingsPanel(_props: FileHubSettingsPanelProps): ReactNo
             <Switch
               checked={form.values['privacy.localFirstVision']}
               label={t('settings.localFirstVision')}
-              onChange={(value) => onEdit('privacy.localFirstVision', value)}
+              onChange={(value) =>{  onEdit('privacy.localFirstVision', value) }}
             />
           }
         />
@@ -274,7 +274,7 @@ function Switch(props: {
       aria-checked={props.checked}
       aria-label={props.label}
       className="zdsh-filehub-switch"
-      onClick={() => props.onChange(!props.checked)}
+      onClick={() =>{  props.onChange(!props.checked) }}
     />
   )
 }

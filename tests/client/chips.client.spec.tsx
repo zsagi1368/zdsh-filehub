@@ -20,13 +20,13 @@ function mount(ui: React.ReactNode): { container: HTMLDivElement; unmount: () =>
   return {
     container,
     unmount: () => {
-      flushSync(() => root.unmount())
+      flushSync(() =>{  root.unmount() })
       container.remove()
     },
   }
 }
 
-const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
+const settle = (): Promise<void> => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 describe('FileHubChips', () => {
   let mounted: { unmount: () => void } | undefined

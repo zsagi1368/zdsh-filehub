@@ -97,16 +97,16 @@ describe('KV-backed meta store', () => {
           get: () => ({}),
         },
       },
-      (message) => warnings.push(message),
+      message => warnings.push(message),
     )
     await meta.record('m1', 'x', { sizeBytes: 1, uploadedAtMs: 1 })
-    expect(await meta.get('m1').then((r) => r.files.x)).toBeDefined()
+    expect(await meta.get('m1').then(r => r.files.x)).toBeDefined()
     expect(warnings).toHaveLength(1)
   })
 
   it('falls back to memory when the storage service is absent entirely', async () => {
     const warnings: string[] = []
-    const meta = createMetaStore(undefined, (message) => warnings.push(message))
+    const meta = createMetaStore(undefined, message => warnings.push(message))
     expect(warnings).toHaveLength(1)
     await expect(meta.sessionIds()).resolves.toEqual([])
   })

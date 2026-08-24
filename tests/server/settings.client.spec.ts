@@ -12,7 +12,7 @@ import {
   makeFakeContext,
   rawRequest,
   startRouteServer,
-} from './helpers.js'
+} from './helpers.client.js'
 import { createFileHubDomain } from '../../src/index.js'
 import { createSettingsService, mergeSettings, FILEHUB_SETTINGS_DEFAULTS } from '../../src/server/settings.js'
 import type { KvFacetLike, KvUnitLike, StorageHubLike } from '../../src/server/meta.js'
@@ -22,7 +22,7 @@ const agent = new http.Agent({ keepAlive: false })
 
 interface DomainHandle {
   port: number
-  close(): Promise<void>
+  close: () => Promise<void>
 }
 
 async function startDomainWith(storage?: StorageHubLike): Promise<DomainHandle> {
@@ -48,7 +48,7 @@ async function startDomainWith(storage?: StorageHubLike): Promise<DomainHandle> 
 }
 
 /** In-memory KV hub faithful to the meta.ts seam shape. */
-function makeFakeKvStorage(): { hub: StorageHubLike; dump(): Record<string, unknown> } {
+function makeFakeKvStorage(): { hub: StorageHubLike; dump: () => Record<string, unknown> } {
   const store = new Map<string, unknown>()
   const kv: KvFacetLike = {
     async open(descriptor) {
@@ -82,7 +82,7 @@ function put(port: number, body: string): Promise<{ status: number; text: string
     path: '/api/filehub/settings',
     headers: { 'content-type': 'application/json' },
     body: new Uint8Array(Buffer.from(body)),
-  }).then((response) => ({ status: response.status, text: response.text }))
+  }).then(response => ({ status: response.status, text: response.text }))
 }
 
 async function get(port: number): Promise<FileHubSettings> {
@@ -175,7 +175,7 @@ describe('PUT /api/filehub/settings', () => {
 
       // A second service instance over the SAME hub sees the persisted state —
       // proving real KV round-trip, not process-local memory.
-      const second = await createSettingsService({ storage: hub, logWarn: () => {} })
+      const second = createSettingsService({ storage: hub, logWarn: () => {} })
       expect(await second.get()).toEqual(view)
     } finally {
       await close()

@@ -65,7 +65,7 @@ function getQueue(): UploadQueue {
 }
 
 function apply(ctx: ClientContext): void {
-  ctx.logger?.info?.('[filehub] client M1 upload domain loaded')
+  ctx.logger.info('[filehub] client M1 upload domain loaded')
 
   // M5 language signal: follow the host locale when the composition ships
   // dsh-client-locale (guarded structural probe — a bare context keeps the

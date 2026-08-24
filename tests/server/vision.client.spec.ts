@@ -12,14 +12,14 @@ import type { AddressInfo } from 'node:net'
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 
 import { createVisionService } from '../../src/server/vision.js'
-import type { CaptionCacheStore, VisionServiceDeps } from '../../src/server/vision.js'
+import type { CaptionCacheStore } from '../../src/server/vision.js'
 import {
   makeDomain,
   makeTempDir,
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from './helpers.js'
+} from './helpers.client.js'
 import { CAPTION_PROMPT } from '../../src/server/vision.js'
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
@@ -53,7 +53,7 @@ async function startFakeOllama(options: FakeOptions = {}): Promise<FakeServer> {
     if ((req.url ?? '').startsWith('/api/tags')) {
       hits.tags += 1
       res.setHeader('content-type', 'application/json')
-      res.end(JSON.stringify({ models: (options.models ?? ['llava:13b']).map((name) => ({ name })) }))
+      res.end(JSON.stringify({ models: (options.models ?? ['llava:13b']).map(name => ({ name })) }))
       return
     }
     if ((req.url ?? '').startsWith('/api/generate')) {
@@ -83,7 +83,7 @@ async function startFakeOllama(options: FakeOptions = {}): Promise<FakeServer> {
     res.statusCode = 404
     res.end()
   })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = (server.address() as AddressInfo).port
   return {
     port,
@@ -91,7 +91,7 @@ async function startFakeOllama(options: FakeOptions = {}): Promise<FakeServer> {
     hits,
     bodies,
     close: async () => {
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await new Promise<void>(resolve => server.close(() =>{  resolve() }))
       server.closeAllConnections?.()
     },
   }
@@ -136,7 +136,7 @@ async function startFakeExplicit(options: ExplicitOptions = {}): Promise<Explici
       res.end(typeof options.body === 'string' ? options.body : JSON.stringify(options.body ?? { response: '远处的山脉' }))
     })
   })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = (server.address() as AddressInfo).port
   return {
     port,
@@ -146,7 +146,7 @@ async function startFakeExplicit(options: ExplicitOptions = {}): Promise<Explici
     },
     bodies,
     close: async () => {
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await new Promise<void>(resolve => server.close(() =>{  resolve() }))
       server.closeAllConnections?.()
     },
   }
@@ -155,9 +155,9 @@ async function startFakeExplicit(options: ExplicitOptions = {}): Promise<Explici
 /** A locally CLOSED port (refused connections — "no ollama installed"). */
 async function closedPort(): Promise<number> {
   const server = http.createServer()
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = (server.address() as AddressInfo).port
-  await new Promise<void>((resolve) => server.close(() => resolve()))
+  await new Promise<void>(resolve => server.close(() =>{  resolve() }))
   server.closeAllConnections?.()
   return port
 }
@@ -188,7 +188,7 @@ describe('vision caption waterfall (real HTTP fakes)', () => {
     const warnings: string[] = []
     let gateCalls = 0
     const service = createVisionService({
-      logWarn: (message) => warnings.push(message),
+      logWarn: message => warnings.push(message),
       endpoint: explicit.base,
       assertPublicUrl: permissivePublicUrl,
       ollamaEndpoint: ollama.base,
@@ -250,12 +250,12 @@ describe('vision caption waterfall (real HTTP fakes)', () => {
     const ollama = await startFakeOllama({ generateStatus: 503 })
     const warnings: string[] = []
     const service = createVisionService({
-      logWarn: (message) => warnings.push(message),
+      logWarn: message => warnings.push(message),
       ollamaEndpoint: ollama.base,
     })
     await expect(service.caption(PNG_BYTES)).resolves.toBeUndefined()
     await expect(service.caption(PNG_BYTES)).resolves.toBeUndefined()
-    expect(warnings.filter((message) => message.includes('ollama channel failed'))).toHaveLength(1)
+    expect(warnings.filter(message => message.includes('ollama channel failed'))).toHaveLength(1)
     expect(ollama.hits.post).toBe(2) // retried per upload, warn deduplicated
     await ollama.close()
   })
@@ -264,11 +264,11 @@ describe('vision caption waterfall (real HTTP fakes)', () => {
     const dead = await closedPort()
     const warnings: string[] = []
     const service = createVisionService({
-      logWarn: (message) => warnings.push(message),
+      logWarn: message => warnings.push(message),
       ollamaEndpoint: `http://127.0.0.1:${dead}`,
     })
     await expect(service.caption(PNG_BYTES)).resolves.toBeUndefined()
-    expect(warnings.some((message) => message.includes('degrading'))).toBe(true)
+    expect(warnings.some(message => message.includes('degrading'))).toBe(true)
   })
 
   it('cache: second upload of identical bytes makes zero extra outbound calls', async () => {
@@ -316,13 +316,13 @@ describe('vision caption waterfall (real HTTP fakes)', () => {
     }
     const warnings: string[] = []
     const blocked = createVisionService({
-      logWarn: (message) => warnings.push(message),
+      logWarn: message => warnings.push(message),
       ...common,
       readGates: async () => ({ mode: 'caption', localFirstVision: true }),
     })
     await expect(blocked.caption(PNG_BYTES)).resolves.toBeUndefined()
     expect(explicit.hits).toBe(0)
-    expect(warnings.some((message) => message.includes('localFirstVision'))).toBe(true)
+    expect(warnings.some(message => message.includes('localFirstVision'))).toBe(true)
 
     const allowed = createVisionService({
       logWarn: () => undefined,
@@ -352,13 +352,13 @@ describe('vision caption waterfall (real HTTP fakes)', () => {
     const ollama = await startFakeOllama()
     const warnings: string[] = []
     const service = createVisionService({
-      logWarn: (message) => warnings.push(message),
+      logWarn: message => warnings.push(message),
       endpoint: explicit.base, // NO assertPublicUrl override → real guard rejects loopback
       ollamaEndpoint: ollama.base,
     })
     await expect(service.caption(PNG_BYTES)).resolves.toBe('一只猫坐在垫子上')
     expect(explicit.hits).toBe(0)
-    expect(warnings.some((message) => message.includes('url policy'))).toBe(true)
+    expect(warnings.some(message => message.includes('url policy'))).toBe(true)
     await Promise.all([explicit.close(), ollama.close()])
   })
 

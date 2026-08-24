@@ -18,7 +18,6 @@ import { injectStylesOnce } from '../util.js'
 import { iconForEntry } from './icons.js'
 import {
   disambiguateLabels,
-  emptyPickerState,
   pickerItemsFromEntries,
   reducePicker,
 } from './pickerModel.js'

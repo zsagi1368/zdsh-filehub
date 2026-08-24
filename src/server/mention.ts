@@ -34,7 +34,7 @@ import fsPromises from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import path from 'node:path'
 
-import { FileEntrySchema, SearchResultSchema, WorkspaceReferenceSchema } from '../contract.js'
+import { SearchResultSchema, WorkspaceReferenceSchema } from '../contract.js'
 export { SearchResultSchema } from '../contract.js'
 import type { FileEntry } from '../contract.js'
 import { sendError, sendJson } from './httpUtil.js'
@@ -212,7 +212,7 @@ type MutableMessage = {
 /** Local deep freeze — mirrors dsh-llm freezeMessage without importing it. */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
-    for (const key of Object.getOwnPropertyNames(value as object)) {
+    for (const key of Object.getOwnPropertyNames(value)) {
       deepFreeze((value as Record<string, unknown>)[key])
     }
     Object.freeze(value)
@@ -251,10 +251,10 @@ export function createMentionInjector(deps: MentionInjectorDeps): MentionInjecto
     Promise.all(
       messages.map(async (message) => {
         const candidate = message as UserMessageLike
-        if (candidate?.source?.kind !== 'user' || candidate.role !== 'user' || !Array.isArray(candidate.content)) {
+        if (candidate.source?.kind !== 'user' || candidate.role !== 'user' || !Array.isArray(candidate.content)) {
           return message
         }
-        const tokens = candidate.content.flatMap((block) =>
+        const tokens = candidate.content.flatMap((block: TextBlockLike | undefined) =>
           block?.type === 'text' && typeof block.text === 'string' ? scanMentionTokens(block.text) : [],
         )
         if (tokens.length === 0) return message
@@ -267,11 +267,11 @@ export function createMentionInjector(deps: MentionInjectorDeps): MentionInjecto
           seen.add(token.value)
           orderedValues.push(token.value)
         }
-        const validations = await Promise.all(orderedValues.map((value) => validateMentionToken(value, cwd)))
+        const validations = await Promise.all(orderedValues.map(value => validateMentionToken(value, cwd)))
         if (signal.aborted) return message
 
         const valid = validations.filter((entry): entry is Extract<MentionValidation, { status: 'ok' }> => entry.status === 'ok')
-        const invalid = validations.filter((entry) => entry.status !== 'ok')
+        const invalid = validations.filter(entry => entry.status !== 'ok')
         if (valid.length === 0) {
           if (invalid.length > 0) {
             deps.logWarn(
@@ -298,9 +298,9 @@ export function createMentionInjector(deps: MentionInjectorDeps): MentionInjecto
         'agent/pre-step',
         async (payload: unknown, next: unknown): Promise<unknown> => {
           const { agent, signal } = payload as { agent?: MentionAgentLike; signal?: AbortSignal }
-          const decision = (await (next as () => Promise<{ kind: string; messages?: unknown[] }> | { kind: string; messages?: unknown[] })()) as
-            | { kind: 'reject' }
-            | { kind: 'enter'; messages: unknown[] }
+          type StepDecision = { kind: 'reject' } | { kind: 'enter'; messages: unknown[] }
+          const nextFn = next as () => Promise<{ kind: string; messages?: unknown[] }> | { kind: string; messages?: unknown[] }
+          const decision = (await nextFn()) as StepDecision
           if (decision.kind !== 'enter' || !Array.isArray(decision.messages)) return decision
           const cwd = agent?.session?.header?.cwd
           if (typeof cwd !== 'string' || cwd === '' || signal?.aborted === true) return decision

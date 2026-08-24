@@ -54,7 +54,7 @@ export interface UploadServiceDeps {
   guards: UploadGuards
   meta: MetaStore
   workspaces: WorkspaceResolver
-  logWarn(message: string): void
+  logWarn: (message: string) => void
 }
 
 // ---- Same-origin fence ------------------------------------------------------
@@ -175,7 +175,7 @@ function consumeWithLimits(
       }
       chunks.push(chunk)
     }
-    const onEnd = (): void => finish({ status: 'ok', bytes: Buffer.concat(chunks) })
+    const onEnd = (): void =>{  finish({ status: 'ok', bytes: Buffer.concat(chunks) }) }
     const onError = (error: Error): void => {
       if (settled) return
       settled = true

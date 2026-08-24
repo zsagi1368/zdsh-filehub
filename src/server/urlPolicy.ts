@@ -79,7 +79,7 @@ function normalizeDottedIpv4(host: string): NormalizedIp | undefined {
   let bytes: number[]
   if (values.length === 4) {
     bytes = values
-    if (bytes.some((value) => value > 0xff)) {
+    if (bytes.some(value => value > 0xff)) {
       throw new UrlPolicyError(`invalid IPv4 quad "${host}"`)
     }
   } else {
@@ -89,7 +89,7 @@ function normalizeDottedIpv4(host: string): NormalizedIp | undefined {
     const tail = values[values.length - 1] ?? 0
     const remainingBytes = 4 - head.length
     const maxTail = 2 ** (8 * remainingBytes) - 1
-    if (head.some((value) => value > 0xff) || tail > maxTail) {
+    if (head.some(value => value > 0xff) || tail > maxTail) {
       throw new UrlPolicyError(`invalid shorthand IPv4 "${host}"`)
     }
     bytes = [...head]
@@ -109,7 +109,7 @@ function expandIpv6(host: string): NormalizedIp | undefined {
   if (text.includes('.', lastColon + 1)) {
     const normalizedTail = normalizeDottedIpv4(text.slice(lastColon + 1))
     if (normalizedTail === undefined || normalizedTail.kind !== 'v4') return undefined
-    const bytes = normalizedTail.ip.split('.').map((value) => Number.parseInt(value, 10))
+    const bytes = normalizedTail.ip.split('.').map(value => Number.parseInt(value, 10))
     const high = ((bytes[0] ?? 0) << 8) | (bytes[1] ?? 0)
     const low = ((bytes[2] ?? 0) << 8) | (bytes[3] ?? 0)
     text = `${text.slice(0, lastColon + 1)}${high.toString(16)}:${low.toString(16)}`
@@ -132,7 +132,7 @@ function expandIpv6(host: string): NormalizedIp | undefined {
 }
 
 function classifyIpv4(ip: string): IpClass {
-  const bytes = ip.split('.').map((value) => Number.parseInt(value, 10))
+  const bytes = ip.split('.').map(value => Number.parseInt(value, 10))
   const b0 = bytes[0] ?? 0
   const b1 = bytes[1] ?? 0
   if (b0 === 0) return 'thisNetwork' // 0.0.0.0/8 ("this network", incl. 0.0.0.0)
@@ -151,11 +151,11 @@ function classifyIpv4(ip: string): IpClass {
 function classifyGroups(groups: readonly number[]): IpClass {
   const g0 = groups[0] ?? 0
   // ::1 (any spelling, compressed or not) before anything else.
-  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) return 'loopback'
-  if (groups.every((group) => group === 0)) return 'unspecified' // ::
+  if (groups.slice(0, 7).every(group => group === 0) && groups[7] === 1) return 'loopback'
+  if (groups.every(group => group === 0)) return 'unspecified' // ::
   // ::ffff:0:0/96 mapped AND the legacy ::/96-compatible form both hide a v4
   // address in the low 32 bits — unwrap and RE-classify as v4 (spec: 复检).
-  if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
+  if (groups.slice(0, 5).every(group => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
     const wordA = groups[6] ?? 0
     const wordB = groups[7] ?? 0
     const v4 = `${wordA >> 8}.${wordA & 0xff}.${wordB >> 8}.${wordB & 0xff}`
@@ -226,8 +226,8 @@ function normalizeHostOrUndefined(host: string): NormalizedIp | undefined {
 function isSanctionedLoopback(ip: NormalizedIp): boolean {
   if (ip.kind === 'v4') return ip.ip === '127.0.0.1'
   const groups = ip.groups
-  if (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) return true // ::1
-  if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
+  if (groups.slice(0, 7).every(group => group === 0) && groups[7] === 1) return true // ::1
+  if (groups.slice(0, 5).every(group => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
     return groups[6] === 0x7f00 && groups[7] === 0x0001 // ::ffff:127.0.0.1
   }
   return false
@@ -256,7 +256,7 @@ export function assertLocalLoopbackUrl(input: string | URL): URL {
 /** Injectable DNS shape (tests mock this to simulate rebinding). */
 export type LookupAllAddresses = (hostname: string) => Promise<Array<{ address: string; family: number }>>
 
-const defaultLookup: LookupAllAddresses = (hostname) => dns.promises.lookup(hostname, { all: true })
+const defaultLookup: LookupAllAddresses = hostname => dns.promises.lookup(hostname, { all: true })
 
 export interface PublicHttpUrlOptions {
   /** Override DNS resolution (tests). Defaults to node dns.lookup(all:true). */

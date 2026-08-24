@@ -37,7 +37,7 @@ describe('pickerModel', () => {
       type: 'expand',
       children: [{ relativePath: 'src/b', kind: 'directory' }],
     })
-    expect(state.items.map((item) => `${item.depth}:${item.relativePath}`)).toEqual([
+    expect(state.items.map(item => `${item.depth}:${item.relativePath}`)).toEqual([
       '0:src',
       '1:src/b',
       '0:src/a.ts',
@@ -46,7 +46,7 @@ describe('pickerModel', () => {
     // Highlight stays on the expanded directory; ArrowRight on a file is inert.
     expect(state.highlight).toBe(0)
     state = reducePicker({ ...state, highlight: 2 }, { type: 'expand', children: [{ relativePath: 'x', kind: 'file' }] })
-    expect(state.items.some((item) => item.relativePath === 'x')).toBe(false)
+    expect(state.items.some(item => item.relativePath === 'x')).toBe(false)
   })
 
   it('collapses a whole subtree and keeps the directory highlighted', () => {
@@ -59,14 +59,14 @@ describe('pickerModel', () => {
       ],
     })
     state = reducePicker(state, { type: 'collapse' })
-    expect(state.items.map((item) => item.relativePath)).toEqual(['src', 'src/a.ts', 'README.md'])
+    expect(state.items.map(item => item.relativePath)).toEqual(['src', 'src/a.ts', 'README.md'])
     expect(state.highlight).toBe(0)
   })
 
   it('replace-items reseeds the page and resets the highlight', () => {
     let state: PickerState = { items: pickerItemsFromEntries(entries), highlight: 2 }
     state = reducePicker(state, { type: 'replace-items', children: [{ relativePath: 'only.md', kind: 'file' }] })
-    expect(state.items.map((item) => item.relativePath)).toEqual(['only.md'])
+    expect(state.items.map(item => item.relativePath)).toEqual(['only.md'])
     expect(state.highlight).toBe(0)
   })
 
@@ -94,7 +94,7 @@ describe('search transport', () => {
       { path: '/w/unrelated.bin', relativePath: 'unrelated.bin', sizeBytes: 0, kind: 'file' as const },
     ]
     const refined = refineEntries(page, 'readme')
-    expect(refined.map((entry) => entry.relativePath)).toEqual(['readme.md', 'src/readme.txt'])
+    expect(refined.map(entry => entry.relativePath)).toEqual(['readme.md', 'src/readme.txt'])
     expect(refineEntries(page, '')).toHaveLength(3)
   })
 

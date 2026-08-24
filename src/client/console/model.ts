@@ -75,7 +75,7 @@ export function matchesFilter(entry: ConsoleEntry, q: string, filter: KindFilter
 /** Filter + sort (newest first) a flattened entry list. */
 export function filterEntries(entries: readonly ConsoleEntry[], q: string, filter: KindFilter): ConsoleEntry[] {
   return entries
-    .filter((entry) => matchesFilter(entry, q, filter))
+    .filter(entry => matchesFilter(entry, q, filter))
     .sort((a, b) => b.uploadedAtMs - a.uploadedAtMs || (a.name < b.name ? -1 : 1))
 }
 
@@ -168,7 +168,7 @@ export function buildRows(
   grouped: boolean,
 ): ConsoleRow[] {
   if (!grouped) {
-    return entries.map((entry) => ({ type: 'entry' as const, entry }))
+    return entries.map(entry => ({ type: 'entry' as const, entry }))
   }
   const bySession = new Map<string, ConsoleEntry[]>()
   const order: string[] = []

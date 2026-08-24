@@ -103,7 +103,7 @@ export function buildFileHubTriggerSource(deps: FileHubTriggerDeps = {}): InputT
         // Prefer the explicit session projection; fall back to the seam used
         // by the upload domain so both surfaces agree on "current session".
         const entries = await fetchPage(req.query, req.signal)
-        return entries.flatMap((entry) => candidateToEntry(entry, req.quoted === true) ?? [])
+        return entries.flatMap(entry => candidateToEntry(entry, req.quoted === true) ?? [])
       } catch {
         return []
       }
@@ -153,7 +153,7 @@ function fallbackSessionId(): string | null {
  */
 export function registerMentionTrigger(ctx: ClientContext, deps: FileHubTriggerDeps = {}): (() => void) | undefined {
   if (readMentionDisabled(deps.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage))) {
-    ctx.logger?.info?.('[filehub] mention trigger disabled by settings; skipping source registration')
+    ctx.logger.info('[filehub] mention trigger disabled by settings; skipping source registration')
     return undefined
   }
   let triggers: InputTriggerServiceContract | undefined
@@ -163,7 +163,7 @@ export function registerMentionTrigger(ctx: ClientContext, deps: FileHubTriggerD
     triggers = undefined
   }
   if (!triggers || typeof triggers.registerSource !== 'function') {
-    ctx.logger?.warn?.('[filehub] inputTriggers service unavailable; @ picker not registered')
+    ctx.logger.warn('[filehub] inputTriggers service unavailable; @ picker not registered')
     return undefined
   }
   return triggers.registerSource(buildFileHubTriggerSource(deps))

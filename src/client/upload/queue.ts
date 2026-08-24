@@ -196,16 +196,16 @@ export function formatUploadError(error: UploadItemError | undefined, lang: Lang
 
 /** Default transport: XHR because fetch has no upload progress events (FR-A6). */
 export function createXhrTransport(): UploadTransport {
-  return (request) =>
+  return request =>
     new Promise<UploadedFileResult>((resolve, reject) => {
       if (typeof XMLHttpRequest === 'undefined') {
         reject(new Error('XMLHttpRequest is not available in this environment'))
         return
       }
       const xhr = new XMLHttpRequest()
-      const onAbort = () => xhr.abort()
+      const onAbort = () =>{  xhr.abort() }
       request.signal.addEventListener('abort', onAbort, { once: true })
-      const cleanup = () => request.signal.removeEventListener('abort', onAbort)
+      const cleanup = () =>{  request.signal.removeEventListener('abort', onAbort) }
       xhr.open('POST', request.url)
       for (const [name, value] of Object.entries(request.headers)) xhr.setRequestHeader(name, value)
       xhr.upload.onprogress = (event: ProgressEvent) => {
@@ -331,7 +331,7 @@ export class UploadQueue {
 
   /** Re-dispatch a failed/cancelled item. Returns false when not retryable-state. */
   retry(id: string): boolean {
-    const item = this.items.find((candidate) => candidate.id === id)
+    const item = this.items.find(candidate => candidate.id === id)
     if (!item || (item.status !== 'error' && item.status !== 'cancelled')) return false
     this.patch(id, { status: 'pending', sentBytes: 0, error: undefined })
     this.emit()
@@ -341,7 +341,7 @@ export class UploadQueue {
 
   /** Abort an in-flight item but keep its row (state 'cancelled'). */
   cancel(id: string): boolean {
-    const item = this.items.find((candidate) => candidate.id === id)
+    const item = this.items.find(candidate => candidate.id === id)
     if (!item || item.status !== 'uploading') return false
     this.controllers.get(id)?.abort()
     return true
@@ -349,7 +349,7 @@ export class UploadQueue {
 
   /** Abort (if needed) and drop the row entirely. */
   remove(id: string): boolean {
-    const index = this.items.findIndex((candidate) => candidate.id === id)
+    const index = this.items.findIndex(candidate => candidate.id === id)
     if (index < 0) return false
     const item = this.items[index]
     if (item !== undefined && item.status === 'uploading') {
@@ -357,7 +357,7 @@ export class UploadQueue {
       this.controllers.delete(id)
     }
     this.blobs.delete(id)
-    this.items = this.items.filter((candidate) => candidate.id !== id)
+    this.items = this.items.filter(candidate => candidate.id !== id)
     this.emit()
     return true
   }
@@ -374,7 +374,7 @@ export class UploadQueue {
   }
 
   private patch(id: string, patch: Partial<Omit<UploadQueueItem, 'id'>>): void {
-    const index = this.items.findIndex((candidate) => candidate.id === id)
+    const index = this.items.findIndex(candidate => candidate.id === id)
     if (index < 0) return
     const next = [...this.items]
     const current = next[index]
@@ -392,7 +392,7 @@ export class UploadQueue {
   /** Dispatch pending items while below the concurrency ceiling. Reentrant-safe. */
   private pump(): void {
     while (this.activeCount < this.concurrency) {
-      const next = this.items.find((item) => item.status === 'pending')
+      const next = this.items.find(item => item.status === 'pending')
       if (!next) return
       this.start(next)
     }
@@ -476,7 +476,7 @@ export class UploadQueue {
 
   /** Patch that ignores late arrivals after remove()/clear(). */
   private patchIfUploading(id: string, patch: Partial<Omit<UploadQueueItem, 'id'>>): void {
-    const item = this.items.find((candidate) => candidate.id === id)
+    const item = this.items.find(candidate => candidate.id === id)
     if (!item || item.status !== 'uploading') return
     this.patch(id, patch)
   }

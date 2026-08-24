@@ -18,7 +18,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from './helpers.js'
+} from './helpers.client.js'
 
 const agent = new http.Agent({ keepAlive: false })
 

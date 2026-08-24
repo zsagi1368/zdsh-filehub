@@ -95,11 +95,11 @@ function deadlineScope(
   timeoutMs: number,
 ): { scopedSignal: AbortSignal; dispose(): void } {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new ParseAbortedError('parse timed out')), timeoutMs)
+  const timer = setTimeout(() =>{  controller.abort(new ParseAbortedError('parse timed out')) }, timeoutMs)
   // Never hold the process open for a parse.
   if (typeof timer.unref === 'function') timer.unref()
-  const onOuterAbort = (): void =>
-    controller.abort(signal?.reason ?? new ParseAbortedError('aborted by caller'))
+  const onOuterAbort = (): void =>{
+    controller.abort(signal?.reason ?? new ParseAbortedError('aborted by caller')) }
   if (signal !== undefined) {
     if (signal.aborted) onOuterAbort()
     else signal.addEventListener('abort', onOuterAbort, { once: true })
@@ -142,6 +142,7 @@ export async function parseDocument(bytes: Uint8Array, fileName: string | undefi
       applies: () => verdict.kind === 'text',
       describe: () => `text fast path (${verdict.mime})`,
       async run(bytes_) {
+        await Promise.resolve()
         const charset = charsetOfMime(verdict.mime)
         const text = decodeBestEffort(bytes_, charset)
         return { text, overview: { format: 'text' }, warnings: [] }
@@ -212,7 +213,7 @@ export async function parseDocument(bytes: Uint8Array, fileName: string | undefi
       // XML parts are text and often partially recoverable.
       const text =
         `[binary content: ${verdict.label}, ${bytes.length} bytes — not decoded]\n` +
-        `(no document parser applies to this file type)`
+        '(no document parser applies to this file type)'
       warnings.push(`no document parser applies (${verdict.label}); emitted binary placeholder`)
       return { format: 'binary', text, overview: { format: 'binary' }, warnings }
     }

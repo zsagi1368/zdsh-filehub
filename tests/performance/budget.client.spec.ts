@@ -21,7 +21,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from '../server/helpers.js'
+} from '../server/helpers.client.js'
 import { createWorkspaceIndexer } from '../../src/server/workspace.js'
 import {
   buildRows,

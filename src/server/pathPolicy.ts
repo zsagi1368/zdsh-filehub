@@ -98,7 +98,7 @@ export function sanitizeRelativePath(input: string): RelativePathResult {
   if (/^[a-zA-Z]:/.test(trimmed)) return { ok: false, reason: 'drive-letter paths are not allowed' }
 
   const rawSegments = trimmed.split('/')
-  if (rawSegments.some((segment) => segment === '..')) {
+  if (rawSegments.some(segment => segment === '..')) {
     return { ok: false, reason: "traversal sequence '..' is not allowed" }
   }
   const segments: string[] = []

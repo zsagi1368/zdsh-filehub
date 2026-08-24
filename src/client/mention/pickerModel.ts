@@ -40,7 +40,7 @@ export const emptyPickerState: PickerState = { items: [], highlight: -1 }
 export function pickerItemsFromEntries(
   entries: readonly { relativePath: string; kind: 'file' | 'directory' }[],
 ): PickerItem[] {
-  return entries.map((entry) => ({ ...entry, depth: 0 }))
+  return entries.map(entry => ({ ...entry, depth: 0 }))
 }
 
 function indexOfHighlightedDirectory(state: PickerState): number | undefined {
@@ -81,7 +81,7 @@ export function reducePicker(state: PickerState, event: PickerEvent): PickerStat
       const parent = state.items[parentIndex]
       if (parent === undefined) return state
       const insertAt = parentIndex + 1
-      const children: PickerItem[] = event.children.map((child) => ({
+      const children: PickerItem[] = event.children.map(child => ({
         relativePath: child.relativePath,
         kind: child.kind,
         depth: parent.depth + 1,

@@ -74,7 +74,7 @@ function mountDock(queue: UploadQueue): { container: HTMLDivElement; unmount: ()
   }
 }
 
-const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 0))
+const settle = (): Promise<void> => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 describe('round3: hostile names in React surfaces', () => {
   it('dock renders a hostile pending-file name as inert TEXT (no injected element)', async () => {
@@ -97,7 +97,7 @@ describe('round3: hostile names in React surfaces', () => {
     let resolveUpload: ((result: UploadedFileResult) => void) | undefined
     const queue = new UploadQueue({
       sessionId: () => 's1',
-      transport: (request) =>
+      transport: request =>
         new Promise<UploadedFileResult>((resolve, reject) => {
           void request
           void reject

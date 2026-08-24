@@ -17,7 +17,7 @@
  * HTTP endpoints.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingMessage } from 'node:http'
 
 import { z } from 'zod'
 
@@ -70,7 +70,7 @@ export function sanitizeSettingsPatch(input: unknown): FileHubSettingsPatch {
     const value = (input as Record<string, unknown>)[key]
     if (value !== undefined) patch[key] = value
   }
-  return patch as FileHubSettingsPatch
+  return patch
 }
 
 /** Merge a validated patch onto a base record into a complete settings view. */
@@ -101,11 +101,12 @@ export interface SettingsStore {
 export function createMemorySettingsStore(): SettingsStore {
   let stored: FileHubSettingsPatch = {}
   return {
-    async load() {
-      return { ...stored }
+    load() {
+      return Promise.resolve({ ...stored })
     },
-    async save(value) {
+    save(value) {
       stored = { ...value }
+      return Promise.resolve()
     },
   }
 }
@@ -148,7 +149,7 @@ function pickKvFacet(storage: unknown): KvFacetLike | undefined {
   if (!backend || typeof backend.names !== 'function' || typeof backend.get !== 'function') return undefined
   for (const name of backend.names()) {
     try {
-      const kv = backend.get(name)?.kv
+      const kv = backend.get(name).kv
       if (kv) return kv
     } catch {
       // Vanished registry entry; keep scanning.
@@ -192,7 +193,7 @@ export function createSettingsService(deps: SettingsServiceDeps): SettingsServic
       const parsed = PATCH_SCHEMA.safeParse(patch)
       if (!parsed.success) {
         throw new SettingsValidationError(
-          parsed.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; '),
+          parsed.error.issues.map(issue => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; '),
         )
       }
       const current = mergeSettings(FILEHUB_SETTINGS_DEFAULTS, sanitizeSettingsPatch(await readStored()))

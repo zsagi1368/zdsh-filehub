@@ -73,8 +73,8 @@ export interface DroppedFile {
 function entryToFile(entry: FileSystemEntryLike): Promise<File> {
   return new Promise<File>((resolve, reject) => {
     entry.file?.(
-      (file) => resolve(file),
-      (error) => reject(error instanceof Error ? error : new Error(`failed to read ${entry.name}`)),
+      (file) =>{  resolve(file) },
+      (error) =>{  reject(error instanceof Error ? error : new Error(`failed to read ${entry.name}`)) },
     )
     // A missing file() callback means an unreadable entry; reject so the
     // subtree fails instead of hanging the whole batch.
@@ -101,7 +101,7 @@ function readAllEntries(reader: FileSystemDirectoryReaderLike): Promise<FileSyst
           collected.push(...page)
           readPage()
         },
-        (error) => reject(error instanceof Error ? error : new Error('readEntries failed')),
+        (error) =>{  reject(error instanceof Error ? error : new Error('readEntries failed')) },
       )
     }
     readPage()
@@ -126,7 +126,7 @@ async function walkEntry(entry: FileSystemEntryLike, prefix: string, out: Droppe
       return // Denied/unreadable directory: contribute nothing, never throw.
     }
     const nextPrefix = `${prefix}${entry.name}/`
-    await Promise.all(children.map((child) => walkEntry(child, nextPrefix, out)))
+    await Promise.all(children.map(child => walkEntry(child, nextPrefix, out)))
   }
 }
 
@@ -153,7 +153,7 @@ export async function collectFromDataTransfer(
     if (entry) roots.push(entry)
   }
   if (roots.length > 0) {
-    await Promise.all(roots.map((root) => walkEntry(root, '', out)))
+    await Promise.all(roots.map(root => walkEntry(root, '', out)))
     if (out.length > 0) return out
   }
   if (fallbackFiles) {
@@ -180,17 +180,10 @@ function dragHasFiles(event: DragEvent): boolean {
 async function collectFromDragEvent(event: DragEvent): Promise<DroppedFile[]> {
   const transfer = event.dataTransfer
   if (!transfer) return []
-  const itemList = transfer.items
-  const snapshot: DataTransferItemLike[] = []
-  if (itemList) {
-    // Snapshot by index: DataTransferItemList mutates during access after drop.
-    for (let index = 0; index < itemList.length; index += 1) {
-      const item = itemList[index]
-      if (item) snapshot.push(item as unknown as DataTransferItemLike)
-    }
-  }
-  const fallback =
-    transfer.files && typeof transfer.files.length === 'number' ? (Array.from(transfer.files) as File[]) : undefined
+  // Snapshot by index: DataTransferItemList mutates during access after drop.
+  // Array.from walks the list's length (array-like), so partial lists are safe.
+  const snapshot: DataTransferItemLike[] = Array.from(transfer.items)
+  const fallback = Array.from(transfer.files)
   return collectFromDataTransfer(snapshot, fallback)
 }
 
@@ -229,7 +222,7 @@ export function UploadEntries(props: FileHubSurfaceProps): ReactNode {
   const enqueueDropped = useCallback(
     (dropped: readonly DroppedFile[]): void => {
       if (dropped.length === 0) return
-      queue.enqueue(dropped.map((entry) => ({ file: entry.file, relativePath: entry.relativePath })))
+      queue.enqueue(dropped.map(entry => ({ file: entry.file, relativePath: entry.relativePath })))
     },
     [queue],
   )

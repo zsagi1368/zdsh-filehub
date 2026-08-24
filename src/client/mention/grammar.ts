@@ -69,7 +69,6 @@ export function formatMentionToken(
   preserveQuote = false,
 ): string | undefined {
   const pathWithSlash = kind === 'directory' ? `${relativePath}/` : relativePath
-  // eslint-disable-next-line no-control-regex -- deliberate control-char guard, host-aligned
   if (/[\u0000-\u001f\u007f-\u009f"]/u.test(pathWithSlash)) return undefined
   const quoted = preserveQuote || /\s/u.test(pathWithSlash)
   if (!quoted) return `@${pathWithSlash}`

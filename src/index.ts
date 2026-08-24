@@ -306,7 +306,7 @@ export interface FileHubDomain {
  */
 export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHubConfig>): FileHubDomain {
   const resolved = resolveConfig(overrides)
-  const logInfo = (message: string): void => ctx.logger.info(message)
+  const logInfo = (message: string): void =>{  ctx.logger.info(message) }
   const logWarn = (message: string): void => ctx.logger.warn?.(message)
 
   const workspaces = createWorkspaceResolver(ctx.sessions, resolved.storageDirName)
@@ -334,7 +334,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   if (ctx.events !== undefined) {
     for (const eventName of ['fs/write-intent', 'fs/edit-intent'] as const) {
       try {
-        eventDisposers.push(ctx.events.on(eventName, () => indexer.invalidateAll()))
+        eventDisposers.push(ctx.events.on(eventName, () =>{  indexer.invalidateAll() }))
       } catch (error: unknown) {
         logWarn(`[filehub] could not subscribe ${eventName}: ${String(error)}`)
       }
@@ -405,7 +405,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
     ttlMs: resolved.lifecycle.ttlMs,
     meta,
     workspaces,
-    storageRootOf: (cwd) => path.join(path.resolve(cwd), resolved.storageDirName),
+    storageRootOf: cwd => path.join(path.resolve(cwd), resolved.storageDirName),
     logInfo,
     logWarn,
   })
@@ -420,7 +420,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
     meta,
     workspaces,
     storage: ctx.storage,
-    storageRootOf: (cwd) => path.join(path.resolve(cwd), resolved.storageDirName),
+    storageRootOf: cwd => path.join(path.resolve(cwd), resolved.storageDirName),
     logWarn,
     maxEntries: resolved.console?.maxEntries,
   })
@@ -472,7 +472,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   const uploadHandlerWithVision = augmentUploadHandlerWithCaption({
     inner: uploadHandler,
     vision: visionService,
-    readFile: (filePath) => fsp.readFile(filePath),
+    readFile: filePath => fsp.readFile(filePath),
     logWarn,
     recordCaption: async (req, absolutePath, caption) => {
       const rawSession = header(req, 'x-session-id')
@@ -495,6 +495,7 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   })
 
   const dispatch: HttpHandler = async (req, res) => {
+    await Promise.resolve()
     let pathname = '/'
     try {
       pathname = new URL(req.url ?? '/', 'http://filehub.invalid').pathname
@@ -513,32 +514,32 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
         })
     }
     if (pathname === '/api/filehub/upload') {
-      if (req.method === 'POST') return run(uploadHandlerWithVision)
+      if (req.method === 'POST') {  run(uploadHandlerWithVision); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/file') {
-      if (req.method === 'DELETE') return run(lifecycle.deleteFile)
+      if (req.method === 'DELETE') {  run(lifecycle.deleteFile); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/list') {
-      if (req.method === 'GET') return run(listHandler)
+      if (req.method === 'GET') {  run(listHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/search') {
-      if (req.method === 'GET') return run(searchHandler)
+      if (req.method === 'GET') {  run(searchHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/library') {
-      if (req.method === 'GET') return run(libraryHandler)
+      if (req.method === 'GET') {  run(libraryHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/usage') {
-      if (req.method === 'GET') return run(usageHandler)
+      if (req.method === 'GET') {  run(usageHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }
@@ -548,18 +549,18 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
         sendError(res, 400, 'malformed session id')
         return
       }
-      if (req.method === 'DELETE') return run((rq, rs) => sessionDeleteHandler(rq, rs, sessionId))
+      if (req.method === 'DELETE') {  run((rq, rs) => sessionDeleteHandler(rq, rs, sessionId)); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/cleanup') {
-      if (req.method === 'POST') return run(cleanupHandler)
+      if (req.method === 'POST') {  run(cleanupHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }
     if (pathname === '/api/filehub/settings') {
-      if (req.method === 'GET') return run(settingsGetHandler)
-      if (req.method === 'PUT') return run(settingsPutHandler)
+      if (req.method === 'GET') {  run(settingsGetHandler); return }
+      if (req.method === 'PUT') {  run(settingsPutHandler); return }
       sendError(res, 405, 'method not allowed')
       return
     }

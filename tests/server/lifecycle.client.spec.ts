@@ -23,7 +23,7 @@ import {
   uploadRequest,
   defaultTestConfig,
   type RunningServer,
-} from './helpers.js'
+} from './helpers.client.js'
 
 const isWindows = process.platform === 'win32'
 
@@ -62,7 +62,7 @@ describe('sweeper', () => {
         ttlMs: 7 * 24 * 60 * 60 * 1000,
         meta,
         workspaces: createWorkspaceResolver(sessions, '.filehub'),
-        storageRootOf: (cwd) => path.join(cwd, '.filehub'),
+        storageRootOf: cwd => path.join(cwd, '.filehub'),
         logInfo: () => undefined,
         logWarn: () => undefined,
       })
@@ -101,7 +101,7 @@ describe('domain-level sweeper clock', () => {
       await fsp.writeFile(path.join(root, 'auto-expire.txt'), 'gone soon')
       let gone = false
       for (let i = 0; i < 40 && !gone; i += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 15))
+        await new Promise(resolve => setTimeout(resolve, 15))
         gone = await fsp
           .access(path.join(root, 'auto-expire.txt'))
           .then(() => false)
@@ -113,7 +113,7 @@ describe('domain-level sweeper clock', () => {
 
       // After dispose the clock is stopped: nothing removes later expired files.
       await fsp.writeFile(path.join(root, 'after-dispose.txt'), 'stays')
-      await new Promise((resolve) => setTimeout(resolve, 120))
+      await new Promise(resolve => setTimeout(resolve, 120))
       await expect(fsp.access(path.join(root, 'after-dispose.txt'))).resolves.toBeUndefined()
     } finally {
       await removeTempDir(tmp)
@@ -158,7 +158,7 @@ describe('DELETE /api/filehub/file', () => {
     await removeTempDir(env.tmp)
   })
 
-  function deletePath(target: string): Promise<import('./helpers.js').RawResponse> {
+  function deletePath(target: string): Promise<import('./helpers.client.js').RawResponse> {
     return rawRequest(env.agent, env.port, {
       method: 'DELETE',
       path: `/api/filehub/file?path=${encodeURIComponent(target)}`,
@@ -268,14 +268,14 @@ describe('GET /api/filehub/list', () => {
     expect(payload.sessionId).toBe('list-s1')
     expect(payload.truncated).toBe(false)
     const seededEntry = payload.entries.find(
-      (entry) => entry.kind === 'file' && entry.relativePath.endsWith('-seed.txt'),
+      entry => entry.kind === 'file' && entry.relativePath.endsWith('-seed.txt'),
     )
     expect(seededEntry).toBeDefined()
     expect(seededEntry?.relativePath.startsWith('.filehub/nested/')).toBe(true)
     expect(seededEntry?.sizeBytes).toBe(10)
     expect(typeof seededEntry?.uploadedAtMs).toBe('number')
     // Directory rows exist as kind=directory.
-    expect(payload.entries.some((entry) => entry.kind === 'directory')).toBe(true)
+    expect(payload.entries.some(entry => entry.kind === 'directory')).toBe(true)
   })
 
   it('flags truncation beyond MAX_LIST_ENTRIES', async () => {

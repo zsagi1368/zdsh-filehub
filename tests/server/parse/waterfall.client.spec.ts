@@ -6,8 +6,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { parseDocument, abortRace } from '../../../src/server/parse/waterfall.js'
-import { makeDocx, makePdf, makeXlsx } from './zipFixture.js'
-import type { ZipEntry } from './zipFixture.js'
+import { makeDocx, makePdf, makeXlsx } from './zipFixture.client.js'
+import type { ZipEntry } from './zipFixture.client.js'
 
 class WarnSink {
   readonly messages: string[] = []
@@ -124,11 +124,11 @@ describe('parseDocument / degradation (never fails)', () => {
       { name: '[Content_Types].xml', data: '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>' },
       { name: 'word/document.xml', data: 'this is <not valid xml>' },
     ]
-    const { buildZip } = await import('./zipFixture.js')
+    const { buildZip } = await import('./zipFixture.client.js')
     const doc = await parseDocument(buildZip(corrupt), 'broken.docx', { log: sink })
     expect(doc.format).toBe('text')
     expect(doc.text.length).toBeGreaterThan(0)
-    expect(doc.warnings.some((w) => w.includes('best-effort'))).toBe(true)
+    expect(doc.warnings.some(w => w.includes('best-effort'))).toBe(true)
     expect(sink.messages.join('\n')).toContain('docx parse failed')
   })
 

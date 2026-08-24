@@ -24,9 +24,9 @@ interface XlsxRowData {
 interface XlsxNodeModule {
   // The node entry ships readXlsxFile as the DEFAULT export (plus the named
   // readSheetNames); normalize both spellings at load time.
-  default?(input: Buffer, options?: { sheet?: number | string }): Promise<unknown[][]>
-  readXlsxFile?(input: Buffer, options?: { sheet?: number | string }): Promise<unknown[][]>
-  readSheetNames(input: Buffer): Promise<string[]>
+  default?: (input: Buffer, options?: { sheet?: number | string }) => Promise<unknown[][]>
+  readXlsxFile?: (input: Buffer, options?: { sheet?: number | string }) => Promise<unknown[][]>
+  readSheetNames: (input: Buffer) => Promise<string[]>
 }
 
 interface ResolvedXlsxModule {
@@ -48,10 +48,10 @@ async function loadXlsx(): Promise<ResolvedXlsxModule> {
     const nodeEntry = 'read-excel-file/node'
     const imported = (await import(nodeEntry)) as unknown as XlsxNodeModule
     const readXlsxFile = imported.readXlsxFile ?? imported.default
-    if (typeof readXlsxFile !== 'function' || typeof imported.readSheetNames !== 'function') {
+    if (readXlsxFile === undefined) {
       throw new Error('read-excel-file/node did not expose the expected API')
     }
-    cachedModule = { readXlsxFile, readSheetNames: imported.readSheetNames.bind(imported) }
+    cachedModule = { readXlsxFile, readSheetNames: input => imported.readSheetNames(input) }
   }
   return cachedModule
 }
@@ -59,10 +59,28 @@ async function loadXlsx(): Promise<ResolvedXlsxModule> {
 function renderCell(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (value instanceof Date) return value.toISOString()
-  return String(value)
+  switch (typeof value) {
+    case 'string':
+      return value
+    case 'number':
+    case 'boolean':
+      return `${value}`
+    // Symbols/bigints stringify; objects/functions have no cell rendering,
+    // so they degrade to explicit JSON.
+    default: {
+      if (typeof value === 'bigint' || typeof value === 'symbol') return value.toString()
+      const json = JSON.stringify(value)
+      return json
+    }
+  }
 }
 
-async function readSheet(module: ResolvedXlsxModule, bytes: Uint8Array, sheet: number | string | undefined, maxRows: number): Promise<XlsxRowData> {
+async function readSheet(
+  module: ResolvedXlsxModule,
+  bytes: Uint8Array,
+  sheet: number | string | undefined,
+  maxRows: number,
+): Promise<XlsxRowData> {
   const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const raw: unknown[][] = await module.readXlsxFile(buffer, sheet === undefined ? undefined : { sheet })
   const rows: unknown[][] = []
@@ -71,7 +89,7 @@ async function readSheet(module: ResolvedXlsxModule, bytes: Uint8Array, sheet: n
   // Walk from the end to drop fully-empty trailing rows (cosmetic padding).
   for (let i = raw.length - 1; i >= 0; i -= 1) {
     const row = raw[i] ?? []
-    const hasValue = row.some((cell) => cell !== null && cell !== undefined && cell !== '')
+    const hasValue = row.some(cell => cell !== null && cell !== undefined && cell !== '')
     if (!hasValue && !sawContentEnd) continue
     sawContentEnd = true
     if (rows.length >= maxRows) continue
@@ -142,10 +160,10 @@ export async function extractXlsx(
     const dim =
       sheetNumber === selected
         ? { rows: data.rows.length, columns: data.columns }
-        : await readSheet(module, bytes, sheetNumber, maxRows).then((d) => ({
-            rows: d.rows.length,
-            columns: d.columns,
-          }))
+        : await readSheet(module, bytes, sheetNumber, maxRows).then(d => ({
+          rows: d.rows.length,
+          columns: d.columns,
+        }))
     sheetDimensions.push(dim)
   }
 

@@ -54,24 +54,28 @@ const TABLE = 'sessions'
 export function createMemoryMetaStore(): MetaStore {
   const records = new Map<string, SessionMetaRecord>()
   return {
-    async record(sessionId, relPath, entry, cwd) {
+    record(sessionId, relPath, entry, cwd) {
       const existing = records.get(sessionId) ?? { files: {} }
       if (cwd !== undefined) existing.cwd = cwd
       existing.files[relPath] = entry
       records.set(sessionId, existing)
+      return Promise.resolve()
     },
-    async remove(sessionId, relPath) {
+    remove(sessionId, relPath) {
       const existing = records.get(sessionId)
-      if (!existing) return
-      delete existing.files[relPath]
+      if (existing !== undefined) {
+        const { [relPath]: _removed, ...rest } = existing.files
+        existing.files = rest
+      }
+      return Promise.resolve()
     },
-    async get(sessionId) {
+    get(sessionId) {
       const existing = records.get(sessionId)
-      if (!existing) return { files: {} }
-      return { ...existing, files: { ...existing.files } }
+      if (!existing) return Promise.resolve({ files: {} })
+      return Promise.resolve({ ...existing, files: { ...existing.files } })
     },
-    async sessionIds() {
-      return [...records.keys()]
+    sessionIds() {
+      return Promise.resolve([...records.keys()])
     },
   }
 }
@@ -166,8 +170,7 @@ class KvMetaStore implements MetaStore {
       const table = snapshot.tables[TABLE] ?? {}
       const existing = table[sessionId] as SessionMetaRecord | undefined
       if (!existing || !(relPath in existing.files)) return
-      const files = { ...existing.files }
-      delete files[relPath]
+      const { [relPath]: _removed, ...files } = existing.files
       const next: SessionMetaRecord = {
         ...(existing.cwd !== undefined ? { cwd: existing.cwd } : {}),
         files,

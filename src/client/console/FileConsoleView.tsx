@@ -211,7 +211,7 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
       if (clipboard === undefined) return
       await clipboard.writeText(selected.path)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      setTimeout(() =>{  setCopied(false) }, 1500)
     } catch {
       // Clipboard denied: leave the path visible for manual selection.
     }
@@ -238,15 +238,15 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
           className="zdsh-filehub-console-search"
           placeholder={t('console.search.placeholder')}
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) =>{  setQuery(event.target.value) }}
         />
-        {KIND_FILTERS.map((kind) => (
+        {KIND_FILTERS.map(kind => (
           <button
             key={kind}
             type="button"
             className="zdsh-filehub-chip"
             aria-pressed={filter === kind}
-            onClick={() => setFilter(kind)}
+            onClick={() =>{  setFilter(kind) }}
           >
             {t(kind === 'all' ? 'console.filter.all' : `console.filter.${kind}`)}
           </button>
@@ -279,7 +279,7 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
           <button type="button" className="zdsh-filehub-btn" onClick={() => void executeCleanup()}>
             {t('console.cleanup.execute')}
           </button>
-          <button type="button" className="zdsh-filehub-btn" onClick={() => setCleanup({ phase: 'idle' })}>
+          <button type="button" className="zdsh-filehub-btn" onClick={() =>{  setCleanup({ phase: 'idle' }) }}>
             {t('console.cleanup.cancel')}
           </button>
         </div>
@@ -296,7 +296,7 @@ export function FileConsoleView(props: FileConsoleViewProps): ReactNode {
       <div
         ref={listRef}
         className="zdsh-filehub-console-list"
-        onScroll={(event) => setScrollTop((event.target as HTMLDivElement).scrollTop)}
+        onScroll={(event) =>{  setScrollTop((event.target as HTMLDivElement).scrollTop) }}
         role="listbox"
         aria-label={t('console.title')}
       >

@@ -11,7 +11,7 @@ import { assertLocalLoopbackUrl, assertPublicHttpUrl, hostnameOf, UrlPolicyError
 import type { LookupAllAddresses } from '../../src/server/urlPolicy.js'
 
 function lookupOf(...addresses: string[]): LookupAllAddresses {
-  return async () => addresses.map((address) => ({ address, family: address.includes(':') ? 6 : 4 }))
+  return async () => addresses.map(address => ({ address, family: address.includes(':') ? 6 : 4 }))
 }
 
 describe('assertLocalLoopbackUrl (Ollama probe reverse lock)', () => {

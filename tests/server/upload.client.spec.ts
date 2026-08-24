@@ -19,7 +19,7 @@ import {
   uploadHeaders,
   uploadRequest,
   type RunningServer,
-} from './helpers.js'
+} from './helpers.client.js'
 import { isLoopbackRemoteAddress, originMatchesHost } from '../../src/server/upload.js'
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
@@ -135,7 +135,7 @@ describe('happy path', () => {
       expect(response.status).toBe(200)
       return jsonOf(response.text)
     })
-    const paths = new Set(results.map((result) => result.path))
+    const paths = new Set(results.map(result => result.path))
     expect(paths.size).toBe(1)
     const directory = path.join(env.root, 'dedupe')
     const entries = await fsp.readdir(directory)
@@ -171,7 +171,7 @@ describe('guard rails: per-error-code', () => {
     })
     expect(response.status).toBe(415)
     const entries = await fsp.readdir(env.root, { recursive: true })
-    expect(entries.some((entry) => String(entry).endsWith('.exe'))).toBe(false)
+    expect(entries.some(entry => entry.endsWith('.exe'))).toBe(false)
   })
 
   it('answers 415 for a dangerous extension hidden behind relpath folders', async () => {
@@ -306,7 +306,7 @@ describe('guard rails: per-error-code', () => {
           })
           // First chunk only; the gate stays held until we end the stream.
           holder.write(new Uint8Array([0x61]))
-          await new Promise((resolve) => setTimeout(resolve, 150))
+          await new Promise(resolve => setTimeout(resolve, 150))
 
           const overflow = await uploadRequest(agent, server.port, {
             sessionId: 'gate-s1',
@@ -402,4 +402,3 @@ describe('same-origin fence', () => {
     })
   })
 })
-

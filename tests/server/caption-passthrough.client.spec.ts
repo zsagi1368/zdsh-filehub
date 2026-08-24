@@ -19,7 +19,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from './helpers.js'
+} from './helpers.client.js'
 import { parseUploadResult, UploadQueue } from '../../src/client/upload/queue.js'
 import type { UploadedFileResult } from '../../src/client/upload/queue.js'
 
@@ -46,11 +46,11 @@ async function startFakeOllama(): Promise<{ base: string; close(): Promise<void>
     res.statusCode = 404
     res.end()
   })
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = (server.address() as AddressInfo).port
   return {
     base: `http://127.0.0.1:${port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () => new Promise<void>(resolve => server.close(() =>{  resolve() })),
   }
 }
 
@@ -80,9 +80,9 @@ describe('caption passthrough: server chain', () => {
       ...defaultTestConfig(),
       vision: { ollamaEndpoint: ollama.base },
     })
-    disposeDomain = domain.dispose
+    disposeDomain = () => { domain.dispose() }
     const server = await startRouteServer(route)
-    closeServer = server.close
+    closeServer = () => server.close()
 
     // 1. Upload an image: the 200 body carries the caption…
     const up = await uploadRequest(new http.Agent({ keepAlive: false }), server.port, {
@@ -103,7 +103,7 @@ describe('caption passthrough: server chain', () => {
     const listBody = JSON.parse(listRes.text) as {
       entries: Array<{ relativePath: string; imageCaption?: string }>
     }
-    const listedImage = listBody.entries.find((entry) => entry.relativePath.includes('cat.png'))
+    const listedImage = listBody.entries.find(entry => entry.relativePath.includes('cat.png'))
     expect(listedImage).toBeDefined()
     expect(listedImage?.imageCaption).toBe(CAPTION)
 
@@ -117,8 +117,8 @@ describe('caption passthrough: server chain', () => {
       sessions: Array<{ entries: Array<{ name: string; imageCaption?: string }> }>
     }
     const libraryEntry = library.sessions
-      .flatMap((group) => group.entries)
-      .find((entry) => entry.name.includes('cat.png'))
+      .flatMap(group => group.entries)
+      .find(entry => entry.name.includes('cat.png'))
     expect(libraryEntry?.imageCaption).toBe(CAPTION)
 
     // 4. Re-listing after self-heal stats stays stable (row survived stat check).
@@ -136,9 +136,9 @@ describe('caption passthrough: server chain', () => {
       ...defaultTestConfig(),
       vision: { ollamaEndpoint: ollama.base },
     })
-    disposeDomain = domain.dispose
+    disposeDomain = () => { domain.dispose() }
     const server = await startRouteServer(route)
-    closeServer = server.close
+    closeServer = () => server.close()
     await uploadRequest(new http.Agent({ keepAlive: false }), server.port, {
       sessionId: 'cap-2',
       fileName: 'notes.txt',
@@ -178,7 +178,7 @@ describe('caption passthrough: client queue defensive forwarding', () => {
       file: new File([new Uint8Array(4)], 'pic.png'),
       relativePath: '',
     }])
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
     const item = queue.getItems()[0]
     expect(item?.status).toBe('done')
     expect(item?.result?.imageCaption).toBe(CAPTION)
@@ -195,7 +195,7 @@ describe('caption passthrough: client queue defensive forwarding', () => {
       file: new File([new Uint8Array(4)], 'doc.txt'),
       relativePath: '',
     }])
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
     const item = queue.getItems()[0]
     expect(item?.status).toBe('done')
     expect(item?.result).toBeDefined()

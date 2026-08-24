@@ -17,7 +17,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from '../server/helpers.js'
+} from '../server/helpers.client.js'
 import {
   assertLocalLoopbackUrl,
   assertPublicHttpUrl,
@@ -49,10 +49,10 @@ afterEach(async () => {
 
 async function start(): Promise<void> {
   const { domain, route } = makeDomain([{ id: 'sess-1', cwd }], defaultTestConfig())
-  disposeDomain = domain.dispose
+  disposeDomain = () => { domain.dispose() }
   const server = await startRouteServer(route)
   port = server.port
-  closeServer = server.close
+  closeServer = () => server.close()
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +150,8 @@ describe('round2: caption waterfall redirect handling', () => {
       ollamaProbe: true,
       ollamaEndpoint: 'http://127.0.0.1:11434',
       readGates: async () => ({ mode: 'caption', localFirstVision: false }),
-      assertPublicUrl: async (input) => (input instanceof URL ? input : new URL(input)),
-      assertLoopbackUrl: (input) => (input instanceof URL ? input : new URL(input)),
+      assertPublicUrl: async input => (input instanceof URL ? input : new URL(input)),
+      assertLoopbackUrl: input => (input instanceof URL ? input : new URL(input)),
       fetchImpl: spyFetch,
     })
     await service.caption(PNG_BYTES)
@@ -161,12 +161,12 @@ describe('round2: caption waterfall redirect handling', () => {
 
   it('a 3xx answer degrades to no-caption instead of being followed (behavioral)', async () => {
     // Real HTTP fake: an "endpoint" that answers 302 toward an intranet target.
-    const redirectServer = http.createServer((req, res) => {
+    const redirectServer = http.createServer((_req, res) => {
       res.statusCode = 302
       res.setHeader('location', 'http://169.254.169.254/latest/meta-data/')
       res.end()
     })
-    await new Promise<void>((resolve) => redirectServer.listen(0, '127.0.0.1', resolve))
+    await new Promise<void>(resolve => redirectServer.listen(0, '127.0.0.1', resolve))
     const address = redirectServer.address() as { port: number }
     try {
       const service = createVisionService({
@@ -175,15 +175,15 @@ describe('round2: caption waterfall redirect handling', () => {
         allowExternalVision: true,
         ollamaProbe: false,
         readGates: async () => ({ mode: 'caption', localFirstVision: false }),
-        assertPublicUrl: async (input) => (input instanceof URL ? input : new URL(input)),
-        assertLoopbackUrl: (input) => (input instanceof URL ? input : new URL(input)),
+        assertPublicUrl: async input => (input instanceof URL ? input : new URL(input)),
+        assertLoopbackUrl: input => (input instanceof URL ? input : new URL(input)),
       })
       const caption = await service.caption(PNG_BYTES)
       // With redirect:'error' node fetch turns the 302 into an error and the
       // channel degrades — nothing ever dials the link-local metadata address.
       expect(caption).toBeUndefined()
     } finally {
-      await new Promise<void>((resolve) => redirectServer.close(() => resolve()))
+      await new Promise<void>(resolve => redirectServer.close(() =>{  resolve() }))
     }
   })
 })
@@ -217,7 +217,7 @@ describe('round2: Origin/remoteAddress forgery matrix', () => {
 
   it('wire: forged Origin from a spoofed non-loopback remote is rejected with 403', async () => {
     const { domain, route } = makeDomain([{ id: 'sess-1', cwd }], defaultTestConfig())
-    disposeDomain = domain.dispose
+    disposeDomain = () => { domain.dispose() }
     const server = await startRouteServer(route, { remoteAddressOverride: '::ffff:10.0.0.5' })
     try {
       const res = await rawRequest(new http.Agent({ keepAlive: false }), server.port, {

@@ -160,7 +160,7 @@ const EN: Record<string, string> = {
 export const FILEHUB_DICTS: Readonly<Record<Lang, Readonly<Record<string, string>>>> = { zh: ZH, en: EN }
 
 /** Every dictionary key; zh/en key-set equality is enforced by unit tests. */
-export type I18nKey = keyof typeof ZH & string
+export type I18nKey = keyof typeof ZH
 
 // ---------------------------------------------------------------------------
 // Language state + translate
@@ -223,7 +223,7 @@ export function bindHostLocale(face: HostLocaleFace | undefined): void {
   if (!face || typeof face.getLocale !== 'function' || typeof face.subscribe !== 'function') return
   try {
     setI18nLang(activeToLang(face.getLocale().active))
-    face.subscribe(() => setI18nLang(activeToLang(face.getLocale().active)))
+    face.subscribe(() =>{  setI18nLang(activeToLang(face.getLocale().active)) })
   } catch {
     // Host face threw mid-bind: keep the navigator fallback silently.
   }

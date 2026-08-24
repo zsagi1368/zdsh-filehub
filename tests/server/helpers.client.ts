@@ -29,7 +29,7 @@ export async function removeTempDir(dir: string): Promise<void> {
       return
     } catch {
       // Windows keeps handles briefly after server/socket close; back off.
-      await new Promise((resolve) => setTimeout(resolve, 40 * (attempt + 1)))
+      await new Promise(resolve => setTimeout(resolve, 40 * (attempt + 1)))
     }
   }
 }
@@ -63,7 +63,7 @@ export interface FakeContext {
 export function makeFakeContext(sessionSpecs: FakeSessionSpec[]): FakeContext {
   const logs: RecordedLogs = { info: [], warn: [], error: [] }
   const routes: CapturedRoute[] = []
-  const sessions = sessionSpecs.map((spec) => ({ ...spec }))
+  const sessions = sessionSpecs.map(spec => ({ ...spec }))
   const ctx = {
     logger: {
       info: (message: string): void => {
@@ -78,11 +78,11 @@ export function makeFakeContext(sessionSpecs: FakeSessionSpec[]): FakeContext {
     },
     sessions: {
       get(id: string) {
-        const found = sessions.find((spec) => spec.id === id)
+        const found = sessions.find(spec => spec.id === id)
         return found ? { id: found.id, header: { cwd: found.cwd } } : undefined
       },
       list() {
-        return sessions.map((spec) => ({ id: spec.id, header: { cwd: spec.cwd } }))
+        return sessions.map(spec => ({ id: spec.id, header: { cwd: spec.cwd } }))
       },
     },
     webServer: {
@@ -217,7 +217,7 @@ export function sendRequest(
     req.on('response', (res) => {
       // Public ClientRequest flag: true when this request rode an existing
       // keep-alive socket (the 413-drain reusability assertion).
-      const reused = req.reusedSocket === true
+      const reused =  req.reusedSocket
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
       res.on('end', () => {
         const body = Buffer.concat(chunks)

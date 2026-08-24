@@ -47,7 +47,7 @@ describe('workspace indexer', () => {
 
     const indexer = createWorkspaceIndexer({
       sessions: {
-        get: (id) => (id === 's1' ? { header: { cwd } } : undefined),
+        get: id => (id === 's1' ? { header: { cwd } } : undefined),
         list: () => [{ id: 's1', header: { cwd } }],
       },
       storageDirName: '.filehub',
@@ -58,10 +58,10 @@ describe('workspace indexer', () => {
       const index = await indexer.get('s1')
       expect(index).toBeDefined()
       expect(index?.truncated).toBe(false)
-      const paths = index?.entries.map((entry) => entry.relativePath).sort() ?? []
+      const paths = index?.entries.map(entry => entry.relativePath).sort() ?? []
       expect(paths).toEqual(['README.md', 'src', 'src/a.ts', 'src/server', 'src/server/b.ts'])
-      expect(index?.entries.find((entry) => entry.relativePath === 'src')?.kind).toBe('directory')
-      expect(index?.entries.find((entry) => entry.relativePath === 'src/a.ts')?.kind).toBe('file')
+      expect(index?.entries.find(entry => entry.relativePath === 'src')?.kind).toBe('directory')
+      expect(index?.entries.find(entry => entry.relativePath === 'src/a.ts')?.kind).toBe('file')
     } finally {
       indexer.dispose()
     }
@@ -104,7 +104,7 @@ describe('workspace indexer', () => {
     })
     try {
       const index = await indexer.get('s')
-      const paths = index?.entries.map((entry) => entry.relativePath) ?? []
+      const paths = index?.entries.map(entry => entry.relativePath) ?? []
       expect(paths).toEqual(['keep.txt'])
       // Sanity: the shipped default list covers the spec's named entries.
       for (const required of ['node_modules', '.git', 'dist', 'build', 'coverage', '__pycache__', '.venv', 'venv', 'target']) {
@@ -151,15 +151,15 @@ describe('workspace indexer', () => {
     try {
       const index = await Promise.race([
         indexer.get('s'),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('index walk hung on symlink cycle')), 8000)),
+        new Promise<never>((_, reject) => setTimeout(() =>{  reject(new Error('index walk hung on symlink cycle')) }, 8000)),
       ])
       if (!index) throw new Error('indexer returned no index for a live session')
       // The cycle guard skips a symlink whose realpath is already on the
       // ancestor chain entirely (candidate not listed, subtree not entered),
       // so exactly the plain tree survives: inner/ + inner/leaf.txt.
-      const paths = index.entries.map((entry) => entry.relativePath)
+      const paths = index.entries.map(entry => entry.relativePath)
       expect(paths).not.toContain('inner/back')
-      expect(paths.filter((entry) => entry.includes('/back'))).toEqual([])
+      expect(paths.filter(entry => entry.includes('/back'))).toEqual([])
       expect(paths).toContain('inner/leaf.txt')
     } finally {
       indexer.dispose()
@@ -185,10 +185,10 @@ describe('workspace indexer', () => {
     })
     try {
       const index = await indexer.get('s')
-      expect(index?.entries.some((entry) => entry.relativePath === 'ok.txt')).toBe(true)
+      expect(index?.entries.some(entry => entry.relativePath === 'ok.txt')).toBe(true)
       if (!readable) return // nothing more to assert on this platform
       // On platforms honoring chmod 000, readdir fails → warn emitted.
-      if (WARN.some((line) => line.includes('locked'))) {
+      if (WARN.some(line => line.includes('locked'))) {
         expect(WARN.join('\n')).toContain('[filehub] index skipped unreadable directory')
       }
     } finally {
@@ -246,7 +246,7 @@ describe('workspace indexer', () => {
       await fsp.writeFile(path.join(cwd, 'b.txt'), 'x')
       indexer.invalidateAll()
       const after = await indexer.get('s') // awaits the background rebuild
-      expect(after?.entries.some((entry) => entry.relativePath === 'b.txt')).toBe(true)
+      expect(after?.entries.some(entry => entry.relativePath === 'b.txt')).toBe(true)
 
       // TTL fallback: advance past ttlMs without any event → rebuild.
       clock += 20_000
@@ -260,7 +260,7 @@ describe('workspace indexer', () => {
   it('returns undefined for unknown or cwd-less sessions', async () => {
     const indexer = createWorkspaceIndexer({
       sessions: {
-        get: (id) => (id === 'no-cwd' ? { header: {} } : undefined),
+        get: id => (id === 'no-cwd' ? { header: {} } : undefined),
         list: () => [],
       },
       storageDirName: '.filehub',

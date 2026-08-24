@@ -24,7 +24,7 @@ import { z } from 'zod'
 
 import { sniff } from '../detect.js'
 import type { SniffKind } from '../detect.js'
-import type { KvFacetLike, KvUnitLike, MetaStore } from './meta.js'
+import type { KvFacetLike, KvUnitLike, MetaStore, StorageHubLike } from './meta.js'
 import { isStrictlyInside } from './pathPolicy.js'
 import { sendError, sendJson } from './httpUtil.js'
 import type { HttpHandler } from './upload.js'
@@ -124,7 +124,7 @@ interface IndexedFile {
 
 interface SessionIndexRecord {
   /** Lazy-backfill watermark: when set, empty-meta sessions are not re-walked. */
-  scannedAtMs?: number
+  scannedAtMs?: number | undefined
   files: Record<string, IndexedFile>
 }
 
@@ -143,26 +143,29 @@ export interface ConsoleIndexStore {
 export function createMemoryConsoleIndexStore(): ConsoleIndexStore {
   const records = new Map<string, SessionIndexRecord>()
   return {
-    async get(sessionId) {
+    get(sessionId) {
       const existing = records.get(sessionId)
-      if (!existing) return emptySessionIndex()
-      return { ...existing, files: { ...existing.files } }
+      if (!existing) return Promise.resolve(emptySessionIndex())
+      return Promise.resolve({ ...existing, files: { ...existing.files } })
     },
     async putKind(sessionId, relPath, kind) {
+      await Promise.resolve()
       const existing = records.get(sessionId) ?? emptySessionIndex()
       existing.files[relPath] = { kind }
       records.set(sessionId, existing)
     },
     async putScannedAt(sessionId, atMs) {
+      await Promise.resolve()
       const existing = records.get(sessionId) ?? emptySessionIndex()
       existing.scannedAtMs = atMs
       records.set(sessionId, existing)
     },
-    async removeSession(sessionId) {
+    removeSession(sessionId) {
       records.delete(sessionId)
+      return Promise.resolve()
     },
-    async sessionIds() {
-      return [...records.keys()]
+    sessionIds() {
+      return Promise.resolve([...records.keys()])
     },
   }
 }
@@ -196,7 +199,7 @@ class KvConsoleIndexStore implements ConsoleIndexStore {
     const snapshot = await unit.loadAll()
     const raw = (snapshot.tables[INDEX_TABLE] ?? {})[sessionId] as SessionIndexRecord | undefined
     if (!raw || typeof raw !== 'object') return emptySessionIndex()
-    return { scannedAtMs: raw.scannedAtMs, files: { ...(raw.files ?? {}) } }
+    return { scannedAtMs: raw.scannedAtMs, files: { ...raw.files } }
   }
 
   private write(sessionId: string, mutate: (record: SessionIndexRecord) => void): Promise<void> {
@@ -238,7 +241,7 @@ class KvConsoleIndexStore implements ConsoleIndexStore {
 }
 
 /** Pick the first backend exposing a KV facet (same policy as meta.ts). */
-function pickKvFacet(storage: { backend: { names(): string[]; get(name: string): { readonly kv?: KvFacetLike | undefined } } } | undefined): KvFacetLike | undefined {
+function pickKvFacet(storage: StorageHubLike | undefined): KvFacetLike | undefined {
   if (!storage) return undefined
   for (const name of storage.backend.names()) {
     try {
@@ -269,23 +272,15 @@ export interface LibraryDeps {
   /** Join a session cwd into its workspace root (<cwd>/<storageDirName>). */
   storageRootOf(cwd: string): string
   logWarn(message: string): void
-  now?(): number
-  maxEntries?: number
+  now?: () => number
+  maxEntries?: number | undefined
 }
 
 interface SessionRoot {
   sessionId: string
   /** Workspace root (<cwd>/<storageDirName>) or undefined when unknowable. */
-  root?: string
-  cwd?: string
-}
-
-async function statSize(absolute: string): Promise<number> {
-  try {
-    return (await fsp.stat(absolute)).size
-  } catch {
-    return 0 // vanished between listing and stat
-  }
+  root?: string | undefined
+  cwd?: string | undefined
 }
 
 /** Classify one file by sniffing its head bytes; failures fall back to binary. */
@@ -651,7 +646,7 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
 
   async function deleteSession(sessionId: string): Promise<{ deleted: number; freedBytes: number }> {
     const roots = await collectRoots()
-    const target = roots.find((root) => root.sessionId === sessionId)
+    const target = roots.find(root => root.sessionId === sessionId)
     if (!target || target.root === undefined) {
       // Unknown session or no discoverable workspace: already clean → idempotent success.
       await dropMetaRows([sessionId])
@@ -661,11 +656,11 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
     let deleted = 0
     let freedBytes = 0
     for (const entry of entries) {
-      const removed = await removeContainedFile(target.root as string, entry.relativePath)
+      const removed = await removeContainedFile(target.root, entry.relativePath)
       if (!removed) continue
       deleted += 1
       freedBytes += entry.sizeBytes
-      await pruneEmptyParents(target.root as string, path.dirname(path.join(target.root as string, entry.relativePath)))
+      await pruneEmptyParents(target.root, path.dirname(path.join(target.root, entry.relativePath)))
     }
     await dropMetaRows([sessionId])
     return { deleted, freedBytes }
@@ -833,7 +828,7 @@ export function createCleanupHandler(deps: LibraryHandlersDeps): HttpHandler {
     }
     const parsed = CleanupRequestSchema.safeParse(parsedBody)
     if (!parsed.success) {
-      sendError(res, 400, `invalid cleanup request: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`)
+      sendError(res, 400, `invalid cleanup request: ${parsed.error.issues.map(issue => issue.message).join('; ')}`)
       return
     }
     if (parsed.data.scope === 'session' && !parsed.data.sessionId) {

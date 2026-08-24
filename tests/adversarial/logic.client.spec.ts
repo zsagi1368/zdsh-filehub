@@ -19,7 +19,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from '../server/helpers.js'
+} from '../server/helpers.client.js'
 import { createWorkspaceIndexer } from '../../src/server/workspace.js'
 import { ParseCache } from '../../src/server/parse/cache.js'
 
@@ -44,10 +44,10 @@ afterEach(async () => {
 
 async function start(): Promise<void> {
   const { domain, route } = makeDomain([{ id: 'sess-1', cwd }], defaultTestConfig())
-  disposeDomain = domain.dispose
+  disposeDomain = () => { domain.dispose() }
   const server = await startRouteServer(route)
   port = server.port
-  closeServer = server.close
+  closeServer = () => server.close()
 }
 
 // ---------------------------------------------------------------------------

@@ -28,9 +28,9 @@ export const PARSE_RECORD_VERSION = 1
 
 export interface CacheOptions {
   /** Max cached documents. Default 64. */
-  maxEntries?: number
+  maxEntries?: number | undefined
   /** Max summed text bytes across all entries. Default 256 MiB. */
-  maxBytes?: number
+  maxBytes?: number | undefined
 }
 
 export const DEFAULT_CACHE_OPTIONS: Required<CacheOptions> = {
@@ -53,8 +53,8 @@ export class ParseCache {
   private totalBytes = 0
 
   constructor(options: CacheOptions = {}) {
-    this.maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_CACHE_OPTIONS.maxEntries)
-    this.maxBytes = Math.max(1, options.maxBytes ?? DEFAULT_CACHE_OPTIONS.maxBytes)
+    this.maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_CACHE_OPTIONS.maxEntries ?? 64)
+    this.maxBytes = Math.max(1, options.maxBytes ?? DEFAULT_CACHE_OPTIONS.maxBytes ?? 256 * 1024 * 1024)
   }
 
   /**
@@ -114,7 +114,7 @@ export class ParseCache {
     this.records.set(key, { version: PARSE_RECORD_VERSION, doc, byteLength })
     this.totalBytes += byteLength
     while (this.records.size > this.maxEntries || this.totalBytes > this.maxBytes) {
-      const oldestKey = this.records.keys().next().value as string | undefined
+      const oldestKey = this.records.keys().next().value
       if (oldestKey === undefined) break
       this.evictKey(oldestKey)
     }

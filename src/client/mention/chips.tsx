@@ -113,14 +113,14 @@ export function FileHubChips(props: FileHubChipsProps): ReactNode {
 
   useEffect(() => {
     setMentionSessionSeam(sessionId ?? null)
-    return () => setMentionSessionSeam(null)
+    return () =>{  setMentionSessionSeam(null) }
   }, [sessionId])
 
   useEffect(() => {
     injectStylesOnce('zdsh-filehub-mention-chip-styles', MENTION_CHIPS_STYLES)
   }, [])
 
-  const draft = useInput ? useInput((state) => state.draft) : draftOverride ?? ''
+  const draft = useInput ? useInput(state => state.draft) : draftOverride ?? ''
   const tokens = scanDraftTokens(draft)
 
   // Kind is unknown client-side until picked/searched; directories carry a
@@ -157,7 +157,7 @@ export function FileHubChips(props: FileHubChipsProps): ReactNode {
           token={token}
           index={index}
           kind={kindOf(token)}
-          onRemove={() => removeToken(token)}
+          onRemove={() =>{  removeToken(token) }}
           onLocate={locateToken}
         />
       ))}
@@ -185,7 +185,7 @@ function ChipRow(props: ChipRowProps): ReactNode {
       title={token.value}
       role="button"
       tabIndex={0}
-      onClick={(event) => onLocate(token, event.currentTarget)}
+      onClick={(event) =>{  onLocate(token, event.currentTarget) }}
       onKeyDown={(event) => {
         if (event.key === 'Enter') onLocate(token, event.currentTarget)
       }}

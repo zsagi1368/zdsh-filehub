@@ -11,14 +11,14 @@ describe('M0 scaffold', () => {
 
   it('logs readiness through the structural host seam', () => {
     const lines: string[] = []
-    apply({ logger: { info: (message) => lines.push(message) } })
+    apply({ logger: { info: message => lines.push(message) } })
     expect(lines[0]).toContain('[filehub]')
     expect(lines[0]).toContain(filehubConfigDefaults.storageDirName)
   })
 
   it('merges partial config over safe defaults', () => {
     const lines: string[] = []
-    apply({ logger: { info: (message) => lines.push(message) } }, { storageDirName: '.custom' })
+    apply({ logger: { info: message => lines.push(message) } }, { storageDirName: '.custom' })
     expect(lines[0]).toContain('.custom')
   })
 

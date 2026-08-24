@@ -103,9 +103,9 @@ export function createDebouncedSearch(
         return
       }
       waiters.push({ resolve, reject })
-      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      signal.addEventListener('abort', () =>{  reject(new Error('aborted')) }, { once: true })
       if (timer !== undefined) clearTimeout(timer)
-      timer = setTimeout(() => flush(query), Math.max(0, delayMs))
+      timer = setTimeout(() =>{  flush(query) }, Math.max(0, delayMs))
       if (typeof timer.unref === 'function') timer.unref()
     })
 }

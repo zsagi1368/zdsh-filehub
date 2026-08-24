@@ -131,7 +131,7 @@ function xmlEscape(text: string): string {
  */
 export function makeDocx(paragraphs: readonly string[]): Buffer {
   const body = paragraphs
-    .map((p) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(p)}</w:t></w:r></w:p>`)
+    .map(p => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(p)}</w:t></w:r></w:p>`)
     .join('')
   const contentTypes =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -249,8 +249,8 @@ export function makePdf(pages: readonly string[]): Buffer {
   const add = (content: string): void => {
     objects.push(content)
   }
-  const kids = pageObjectNumbers.map((n) => `${n} 0 R`).join(' ')
-  add(`<< /Type /Catalog /Pages 2 0 R >>`) // object 1
+  const kids = pageObjectNumbers.map(n => `${n} 0 R`).join(' ')
+  add('<< /Type /Catalog /Pages 2 0 R >>') // object 1
   add(`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`) // object 2
   pages.forEach((text, i) => {
     const pageNumber = pageObjectNumbers[i]!
@@ -263,7 +263,7 @@ export function makePdf(pages: readonly string[]): Buffer {
     const stream = `BT /F1 12 Tf 72 720 Td (${escaped}) Tj ET`
     add(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`)
   })
-  add(`<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>`) // last object
+  add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>') // last object
 
   const header = '%PDF-1.4\n'
   const parts: Buffer[] = [Buffer.from(header, 'latin1')]
@@ -279,7 +279,7 @@ export function makePdf(pages: readonly string[]): Buffer {
   const xrefStart = position
   const count = objects.length + 1
   let xref = `xref\n0 ${count}\n`
-  xref += `0000000000 65535 f \r\n`
+  xref += '0000000000 65535 f \r\n'
   for (const objOffset of offsets) {
     xref += `${String(objOffset).padStart(10, '0')} 00000 n \r\n`
   }

@@ -6,7 +6,7 @@
  * mammoth accepts no AbortSignal; the waterfall's abort race wraps this call.
  */
 
-import type { DocumentOverview, ParsedDocument } from './types.js'
+import type { DocumentOverview } from './types.js'
 
 interface MammothModule {
   extractRawText(input: { buffer: Buffer }): Promise<{ value: string }>
@@ -16,7 +16,7 @@ let cachedMammoth: MammothModule | undefined
 
 async function loadMammoth(): Promise<MammothModule> {
   if (!cachedMammoth) {
-    cachedMammoth = (await import('mammoth')) as unknown as MammothModule
+    cachedMammoth = await import('mammoth')
   }
   return cachedMammoth
 }
@@ -28,7 +28,7 @@ export async function extractDocx(bytes: Uint8Array): Promise<{
 }> {
   const mammoth = await loadMammoth()
   const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) })
-  const text = result.value ?? ''
+  const text = result.value || ''
   // Paragraph count = non-empty blocks of the mammoth extraction.
   let paragraphCount = 0
   for (const block of text.split('\n\n')) {

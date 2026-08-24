@@ -84,23 +84,22 @@ export function FileHubDock(props: FileHubDockProps): ReactNode {
         removeRow(item.id)
         return
       }
-      setDeletingIds((previous) => new Set(previous).add(item.id))
+      setDeletingIds(previous => new Set(previous).add(item.id))
       setDeleteErrors((previous) => {
         if (!(item.id in previous)) return previous
-        const next = { ...previous }
-        delete next[item.id]
+        const { [item.id]: _removed, ...next } = previous
         return next
       })
       const deleter = onDeleteUploaded ?? deleteUploadedFile
       deleter(path)
-        .then(() => removeRow(item.id))
+        .then(() =>{  removeRow(item.id) })
         .catch(() => {
           setDeletingIds((previous) => {
             const next = new Set(previous)
             next.delete(item.id)
             return next
           })
-          setDeleteErrors((previous) => ({
+          setDeleteErrors(previous => ({
             ...previous,
             [item.id]: lang === 'zh' ? '删除失败，可重试' : 'Delete failed; try again',
           }))
@@ -120,7 +119,7 @@ export function FileHubDock(props: FileHubDockProps): ReactNode {
 
   return (
     <div className="zdsh-filehub-dock" data-testid="zdsh-filehub-dock">
-      {items.map((item) => (
+      {items.map(item => (
         <DockRow
           key={item.id}
           item={item}
@@ -215,7 +214,7 @@ function DockRow(props: DockRowProps): ReactNode {
             type="button"
             className="zdsh-filehub-xbtn"
             title={lang === 'zh' ? '重试' : 'Retry'}
-            onClick={() => onRetry(item.id)}
+            onClick={() =>{  onRetry(item.id) }}
           >
             ⟳
           </button>
@@ -225,7 +224,7 @@ function DockRow(props: DockRowProps): ReactNode {
             type="button"
             className="zdsh-filehub-xbtn"
             title={lang === 'zh' ? '取消' : 'Cancel'}
-            onClick={() => onRemove(item.id)}
+            onClick={() =>{  onRemove(item.id) }}
           >
             ✕
           </button>
@@ -235,7 +234,7 @@ function DockRow(props: DockRowProps): ReactNode {
             className="zdsh-filehub-xbtn"
             disabled={deleting}
             title={lang === 'zh' ? '从工作区删除' : 'Delete from workspace'}
-            onClick={() => onRemoveUploaded(item)}
+            onClick={() =>{  onRemoveUploaded(item) }}
           >
             {deleting ? '…' : '✕'}
           </button>
@@ -244,7 +243,7 @@ function DockRow(props: DockRowProps): ReactNode {
             type="button"
             className="zdsh-filehub-xbtn"
             title={lang === 'zh' ? '移除' : 'Remove'}
-            onClick={() => onRemove(item.id)}
+            onClick={() =>{  onRemove(item.id) }}
           >
             ✕
           </button>

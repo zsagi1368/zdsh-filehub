@@ -88,10 +88,12 @@ export interface LlmResolvedModelInfoLike {
 }
 
 export interface LlmRuntimeFaceLike {
-  resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfoLike>
+  resolveModelInfo: (provider: string, model: string, signal?: AbortSignal) => Promise<LlmResolvedModelInfoLike>
 }
 
 export interface ImageCapableGateDeps {
+  /** Host logger sink; degradation warnings only. */
+  logWarn: (message: string) => void
   /** Host llm runtime face; absent in bare contexts. */
   llm?: LlmRuntimeFaceLike | undefined
   /**
@@ -100,9 +102,7 @@ export interface ImageCapableGateDeps {
    * exposes it.
    */
   nativeRoute?: Readonly<{ provider: string; model: string }> | undefined
-  logWarn(message: string): void
 }
-
 /**
  * Build the FR-D1 seam. Default (no llm face or no route): always false —
  * standalone hosts count as non-native and enter the waterfall.
@@ -112,7 +112,7 @@ export function createImageCapableGate(deps: ImageCapableGateDeps): () => Promis
   // TODO(integration): swap config.vision.nativeRoute for the live session
   // route once the host exposes the agent/model selection seam to plugins.
   if (llm === undefined || nativeRoute === undefined || typeof llm.resolveModelInfo !== 'function') {
-    return async () => false
+    return () => Promise.resolve(false)
   }
   const route = nativeRoute
   return async () => {
@@ -146,10 +146,11 @@ export function captionCacheKey(channel: VisionChannel, digestHex: string): stri
 export function createMemoryCaptionCache(maxEntries: number = DEFAULT_CACHE_ENTRIES): CaptionCacheStore {
   const entries = new Map<string, string>()
   return {
-    async get(key) {
-      return entries.get(key)
+    get(key) {
+      return Promise.resolve(entries.get(key))
     },
     async put(key, value) {
+      await Promise.resolve()
       entries.set(key, value)
       while (entries.size > maxEntries) {
         const oldest = entries.keys().next().value
@@ -201,7 +202,7 @@ function pickKvFacet(storage: unknown): KvFacetLike | undefined {
   if (!backend || typeof backend.names !== 'function' || typeof backend.get !== 'function') return undefined
   for (const name of backend.names()) {
     try {
-      const kv = backend.get(name)?.kv
+      const kv = backend.get(name).kv
       if (kv) return kv
     } catch {
       // Vanished registry entry; keep scanning (mirrors meta.ts/library.ts).
@@ -215,7 +216,7 @@ function pickKvFacet(storage: unknown): KvFacetLike | undefined {
 // ---------------------------------------------------------------------------
 
 export interface VisionServiceDeps {
-  logWarn(message: string): void
+  logWarn: (message: string) => void
   /** Host storage hub (KV facet pick for the caption cache). Optional. */
   storage?: unknown
   /** FR-D1 route gate; defaults to the non-native seam (always false). */
@@ -277,7 +278,7 @@ function extractCaption(payload: unknown): string | undefined {
 const VISION_MODEL_HINT = /(vision|llava|minicpm|moondream|qvq|internvl|glm-4v|-vl|\bvl)/i
 
 export function pickOllamaModel(names: readonly string[]): string | undefined {
-  return names.find((name) => VISION_MODEL_HINT.test(name)) ?? names[0]
+  return names.find(name => VISION_MODEL_HINT.test(name)) ?? names[0]
 }
 
 export interface FetchLike {
@@ -302,7 +303,7 @@ export interface FetchLike {
 }
 
 const defaultFetch: FetchLike = (url, init) =>
-  fetch(url, { ...(init as RequestInit), redirect: 'error' }) as unknown as ReturnType<FetchLike>
+  fetch(url, { ...(init as RequestInit), redirect: 'error' })
 
 export function createVisionService(deps: VisionServiceDeps): VisionService {
   const logWarn = deps.logWarn
@@ -312,8 +313,8 @@ export function createVisionService(deps: VisionServiceDeps): VisionService {
   const ollamaEndpoint = deps.ollamaEndpoint ?? DEFAULT_OLLAMA_ENDPOINT
   const timeoutMs = deps.timeoutMs ?? DEFAULT_VISION_TIMEOUT_MS
   const probeTimeoutMs = deps.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS
-  const resolveImageCapable = deps.resolveImageCapable ?? (async () => false)
-  const readGates = deps.readGates ?? (async () => ({ ...DEFAULT_GATES }))
+  const resolveImageCapable = deps.resolveImageCapable ?? (() => Promise.resolve(false))
+  const readGates = deps.readGates ?? (() => Promise.resolve({ ...DEFAULT_GATES }))
   const assertPublicUrl =
     deps.assertPublicUrl ?? ((input: string | URL) => assertPublicHttpUrl(input, { lookup: deps.lookup }))
   const assertLoopbackUrl = deps.assertLoopbackUrl ?? assertLocalLoopbackUrl

@@ -69,7 +69,7 @@ async function collectRootEntries(deps: LifecycleDeps): Promise<RootEntry[]> {
     byKey.set(resolveKey(workspace.root), { sessionId: workspace.sessionId, root: workspace.root })
   }
   for (const sessionId of await deps.meta.sessionIds()) {
-    if ([...byKey.values()].some((entry) => entry.sessionId === sessionId)) continue
+    if ([...byKey.values()].some(entry => entry.sessionId === sessionId)) continue
     const record = await deps.meta.get(sessionId)
     if (record.cwd !== undefined && record.cwd !== '') {
       const root = deps.storageRootOf(record.cwd)
@@ -210,7 +210,7 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
     }
 
     const entries = await collectRootEntries(deps)
-    const owner = entries.find((entry) => isStrictlyInside(entry.root, target as string))
+    const owner = entries.find(entry => isStrictlyInside(entry.root, target as string))
     if (!owner) {
       sendError(res, 403, 'target path escapes every session workspace')
       return
@@ -218,7 +218,7 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
 
     let stats
     try {
-      stats = await fsp.stat(target as string)
+      stats = await fsp.stat(target)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         res.statusCode = 204
@@ -240,7 +240,7 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
     try {
       const [realRoot, realTarget] = await Promise.all([
         fsp.realpath(owner.root),
-        fsp.realpath(target as string),
+        fsp.realpath(target),
       ])
       if (!isStrictlyInside(realRoot, realTarget)) {
         sendError(res, 403, 'target path escapes every session workspace')
@@ -258,7 +258,7 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
       return
     }
     try {
-      await fsp.unlink(target as string)
+      await fsp.unlink(target)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         res.statusCode = 204
@@ -269,9 +269,9 @@ export function createLifecycle(deps: LifecycleDeps): LifecycleController {
       return
     }
 
-    await pruneEmptyParents(resolvedRoot, path.dirname(target as string))
+    await pruneEmptyParents(resolvedRoot, path.dirname(target))
     if (owner.sessionId !== undefined) {
-      const relativeFromRoot = forwardSlashes(path.relative(resolvedRoot, target as string))
+      const relativeFromRoot = forwardSlashes(path.relative(resolvedRoot, target))
       await deps.meta.remove(owner.sessionId, relativeFromRoot).catch(() => undefined)
     }
     res.statusCode = 204

@@ -20,7 +20,7 @@ import {
   removeTempDir,
   startRouteServer,
   uploadRequest,
-} from '../server/helpers.js'
+} from '../server/helpers.client.js'
 import { sanitizeFileName, sanitizeRelativePath } from '../../src/server/pathPolicy.js'
 import { registerReadingTools } from '../../src/server/tools.js'
 import type {
@@ -31,7 +31,7 @@ import type {
   ToolsRegistryLike,
 } from '../../src/server/tools.js'
 import { createFileHubDomain } from '../../src/index.js'
-import type { CapturedRoute } from '../server/helpers.js'
+import type { CapturedRoute } from '../server/helpers.client.js'
 
 const agent = new http.Agent({ keepAlive: false })
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])

@@ -132,9 +132,9 @@ describe('containment (isStrictlyInside / assertInside)', () => {
   })
 
   it('assertInside throws PathPolicyError on violations only', () => {
-    expect(() => assertInside(root, path.join(root, 'ok.txt'))).not.toThrow()
-    expect(() => assertInside(root, root)).toThrow(PathPolicyError)
-    expect(() => assertInside(root, `${root}x`)).toThrow(/workspace/)
+    expect(() =>{  assertInside(root, path.join(root, 'ok.txt')) }).not.toThrow()
+    expect(() =>{  assertInside(root, root) }).toThrow(PathPolicyError)
+    expect(() =>{  assertInside(root, `${root}x`) }).toThrow(/workspace/)
   })
 })
 
