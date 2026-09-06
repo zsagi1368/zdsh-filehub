@@ -19,7 +19,9 @@
  *   waits for the declaration, runs the callback's registrations under the
  *   caller's fiber, and disposes them when the declaration collapses.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// Type-only: pulls the ui-renderer Context merge (ctx.slots registry).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the ui-conversation SlotMap merge (conversation.input.*,
 // conversation.view).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -39,7 +41,6 @@ import { bindHostLocale, t } from './i18n.js'
 
 /** Client bundles this plugin requires the host to provide first. */
 const inject = [
-  '@deepseek-ai/dsh-client-runtime',
   '@deepseek-ai/dsh-client-ui-conversation',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-input-trigger',

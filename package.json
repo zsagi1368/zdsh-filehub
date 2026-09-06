@@ -39,7 +39,6 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-input-trigger",
@@ -66,7 +65,6 @@
     "@deepseek-ai/dsh-api-remotes": "*",
     "@deepseek-ai/dsh-client-connection": "*",
     "@deepseek-ai/dsh-client-locale": "*",
-    "@deepseek-ai/dsh-client-runtime": "*",
     "@deepseek-ai/dsh-client-ui-conversation": "*",
     "@deepseek-ai/dsh-client-ui-input-trigger": "*",
     "@deepseek-ai/dsh-client-ui-settings": "*",
@@ -95,9 +93,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-client-locale": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-runtime": {
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-conversation": {
@@ -141,23 +136,24 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "link:../Fork/vendor/cordis",
-    "@deepseek-ai/dsh-agent": "link:../Fork/packages/core/agent",
-    "@deepseek-ai/dsh-api-remotes": "link:../Fork/packages/api/remotes",
-    "@deepseek-ai/dsh-client-connection": "link:../Fork/packages/client/connection",
-    "@deepseek-ai/dsh-client-locale": "link:../Fork/packages/client/locale",
-    "@deepseek-ai/dsh-client-runtime": "link:../Fork/packages/client/runtime",
-    "@deepseek-ai/dsh-client-ui-conversation": "link:../Fork/packages/client/ui-conversation",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "link:../Fork/packages/client/ui-input-trigger",
-    "@deepseek-ai/dsh-client-ui-settings": "link:../Fork/packages/client/ui-settings",
-    "@deepseek-ai/dsh-client-ui-slots": "link:../Fork/packages/client/ui-slots",
-    "@deepseek-ai/dsh-fs": "link:../Fork/packages/fs/fs",
-    "@deepseek-ai/dsh-llm": "link:../Fork/packages/llm/llm",
-    "@deepseek-ai/dsh-settings": "link:../Fork/packages/settings/settings",
-    "@deepseek-ai/dsh-storage": "link:../Fork/packages/storage/storage",
-    "@deepseek-ai/dsh-typert-protocol": "link:../Fork/packages/typert/protocol",
-    "@deepseek-ai/dsh-typert-registry": "link:../Fork/packages/typert/registry",
-    "@deepseek-ai/schemastery": "link:../Fork/vendor/schemastery",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-api-remotes": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-connection": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-locale": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-ui-conversation": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-ui-renderer": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-ui-settings": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-client-ui-slots": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-fs": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-settings": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-storage": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-tools": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-typert-protocol": "=0.1.2-alpha.4",
+    "@deepseek-ai/dsh-typert-registry": "=0.1.2-alpha.4",
+    "@deepseek-ai/schemastery": "^3.18.0",
     "@types/node": "^24.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

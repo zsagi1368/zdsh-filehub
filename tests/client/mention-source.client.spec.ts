@@ -4,7 +4,7 @@
  * degradation when the feature toggle is off.
  */
 import { describe, expect, it } from 'vitest'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 
 import {
   buildFileHubTriggerSource,
@@ -27,10 +27,11 @@ const fetcher: SearchFetcher = async (_sessionId, query) =>
 /** Structural session projection; the real type brands the id, tests need no brand. */
 type AnySession = Parameters<ReturnType<typeof buildFileHubTriggerSource>['candidates']>[0]
 const SESSION: AnySession = { sessionId: 's1' } as AnySession
-const REQUEST = (query = '', quoted = false) => ({
+const REQUEST = (query = '', quoted = false, drilled = false) => ({
   query,
   quoted,
   position: 'inline' as const,
+  drilled,
   signal: new AbortController().signal,
 })
 
@@ -57,6 +58,7 @@ describe('FileHub @ trigger source', () => {
       session: SESSION,
       position: 'inline',
       via: 'menu',
+      action: 'pick',
       span: { start: 0, end: 1, draftRev: 1 },
     })
     expect(outcome).toEqual({ text: '@src/deep.ts ' })
@@ -73,6 +75,7 @@ describe('FileHub @ trigger source', () => {
       session: SESSION,
       position: 'inline',
       via: 'menu',
+      action: 'pick',
       span: { start: 0, end: 1, draftRev: 1 },
     })
     expect(dirOutcome).toEqual({ text: '@src/ ' })
@@ -88,6 +91,7 @@ describe('FileHub @ trigger source', () => {
       session: SESSION,
       position: 'inline',
       via: 'menu',
+      action: 'pick',
       span: { start: 0, end: 1, draftRev: 1 },
     })
     expect(outcome).toEqual({ text: '@"docs/my notes.md" ' })
@@ -100,6 +104,7 @@ describe('FileHub @ trigger source', () => {
       session: SESSION,
       position: 'inline',
       via: 'menu',
+      action: 'pick',
       span: { start: 0, end: 1, draftRev: 1 },
     })).toBeUndefined()
   })

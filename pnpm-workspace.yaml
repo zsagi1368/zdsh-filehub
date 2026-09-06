@@ -1,8 +1,8 @@
 # FileHub standalone-plugin build settings.
 #
 # Host-provided packages (@deepseek-ai/*) are declared as OPTIONAL PEERS and
-# must never be fetched from any registry: the host resolves them at runtime,
-# and development types come from link: devDependencies into ../Fork.
+# resolved by the host at runtime; development types come from registry-pinned
+# devDependencies (=0.1.2-alpha.4, aligned to the zDSH baseline).
 # pnpm 11 reads its settings from this file (.npmrc keys are ignored).
 autoInstallPeers: false
 dedupePeerDependents: true

@@ -21,7 +21,7 @@
  * placeholder until the Remote settings land in M5) or the inputTriggers
  * service is absent, registration is SKIPPED — never thrown.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only imports: the client bundle never loads host runtime modules here.
 import type {
   ClientSessionContext,
