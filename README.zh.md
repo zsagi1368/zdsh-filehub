@@ -121,7 +121,7 @@ FileHub 处理用户文件，因此这里的安全声明全部由具名测试背
 ## 开发
 
 ```sh
-pnpm install   # 宿主类型经 registry 精确钉 devDependencies（=0.1.2-alpha.4，zDSH 基线）解析
+pnpm install   # 宿主类型经 registry 精确钉 devDependencies（=0.1.2-rc.1，zDSH 基线）解析
 pnpm run check # typecheck + test + build 三门
 ```
 

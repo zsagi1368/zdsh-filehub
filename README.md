@@ -168,7 +168,7 @@ See [SECURITY.md](./SECURITY.md) for the claim-by-claim evidence map.
 ## Development
 
 ```sh
-pnpm install   # host types resolve from registry-pinned devDependencies (=0.1.2-alpha.4, zDSH baseline)
+pnpm install   # host types resolve from registry-pinned devDependencies (=0.1.2-rc.1, zDSH baseline)
 pnpm run check # typecheck + test + build
 ```
 
