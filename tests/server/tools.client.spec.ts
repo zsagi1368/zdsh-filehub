@@ -22,28 +22,48 @@ import type {
 import { ParseCache } from '../../src/server/parse/cache.js'
 import { makeDocx, makePdf, makeXlsx } from './parse/zipFixture.client.js'
 import { removeTempDir } from './helpers.client.js'
+import { collectJsonSchemaViolations } from './json-schema-subset.client.js'
 
 // ---- Harness ----------------------------------------------------------------
 
 interface Captured {
   tools: FilehubToolDefinition[]
   sections: Array<{ name: string; order: number; text: string }>
+  sequence: string[]
 }
 
 function registerHarness(deps: Partial<ReadingToolsDeps> = {}): {
   captured: Captured
   disposers: Array<() => void>
 } {
-  const captured: Captured = { tools: [], sections: [] }
+  const captured: Captured = { tools: [], sections: [], sequence: [] }
   const tools: ToolsRegistryLike = {
     register(definition) {
+      // Host-identical register surface (dsh-tools index.ts register body):
+      // output shape check, then assertSupportedJsonSchema(output.schema),
+      // then the timeoutMs check. B01: the previous unconditional fake
+      // captured author-DSL schemas that the REAL host rejects at register.
+      const output = definition?.output
+      if (output === undefined || typeof output !== 'object'
+        || typeof output.render !== 'function'
+        || (output.presentationMeta !== undefined && typeof output.presentationMeta !== 'function')) {
+        throw new TypeError(`tool "${definition?.name}" must declare output { schema, render, presentationMeta? }`)
+      }
+      const violations = collectJsonSchemaViolations(output.schema)
+      if (violations.length > 0) throw new Error(`unsupported JSON schema: ${violations.join('; ')}`)
+      const timeoutMs = definition.timeoutMs
+      if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+        throw new TypeError(`tool "${definition.name}" timeoutMs must be a positive finite number`)
+      }
       captured.tools.push(definition)
+      captured.sequence.push(`tool:${definition.name}`)
       return () => undefined
     },
   }
   const systemPrompt: SystemPromptRegistryLike = {
     section(section) {
       captured.sections.push(section)
+      captured.sequence.push(`section:${section.name}`)
       return () => undefined
     },
   }
@@ -97,19 +117,54 @@ describe('registration', () => {
     expect(captured.sections[0]?.text).toContain('offset=')
     expect(captured.sections[0]?.text).toContain('sheet')
     for (const disposer of disposers) expect(typeof disposer).toBe('function')
+    // B01 ordering: both tools FIRST, guidance section LAST — a tool
+    // registration throw can then never leave the section dangling alone.
+    expect(captured.sequence).toEqual([
+      'tool:read_document',
+      'tool:list_workspace_files',
+      'section:filehub-document-reading',
+    ])
+  })
+
+  it('B01: registered schemas pass the host-subset validator; pre-fix author-DSL shapes fail it', () => {
+    const { captured } = registerHarness()
+    expect(captured.tools).toHaveLength(2)
+    for (const tool of captured.tools) {
+      expect(collectJsonSchemaViolations(tool.output.schema)).toEqual([])
+      // parameters ride the same enforced subset once compiled (object root).
+      expect(collectJsonSchemaViolations(tool.parameters)).toEqual([])
+    }
+    // Pre-fix forms (HEAD) reproduced verbatim — both must reject exactly as
+    // the real host register (assertSupportedJsonSchema) did, which was B01.
+    expect(collectJsonSchemaViolations({ type: 'json' })).toEqual([
+      'schema.type must be one of object/array/string/number/integer/boolean/null',
+    ])
+    expect(collectJsonSchemaViolations({
+      type: 'object',
+      properties: { p: { type: 'string', required: true } },
+    })).toEqual([
+      'schema.properties.p.required is not supported on type "string"',
+    ])
   })
 
   it('declares the empirically verified contract fields', () => {
     const { captured } = registerHarness()
     const read = toolOf(captured, 'read_document')
     expect(typeof read.description).toBe('string')
-    expect(read.parameters?.path).toMatchObject({ type: 'string', required: true })
+    // B01: parameters are the host-COMPILED form (object root + required
+    // name-array), not the author DSL the pre-fix code carried.
+    expect(read.parameters).toMatchObject({
+      type: 'object',
+      required: ['path'],
+      properties: { path: { type: 'string' } },
+    })
     expect(read.timeoutMs).toBe(120_000)
     expect(read.isConcurrencySafe?.({})).toBe(true)
     expect(typeof read.output.presentationMeta).toBe('function')
 
     const list = toolOf(captured, 'list_workspace_files')
-    expect(list.parameters).toEqual({}) // implicit open object root, no properties
+    // compiled image of the author `{}`: open object root, no properties.
+    expect(list.parameters).toEqual({ type: 'object', properties: {} })
     expect(list.timeoutMs).toBe(120_000)
     expect(list.isConcurrencySafe?.({})).toBe(true)
   })

@@ -10,6 +10,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWorkspaceIndexer, DEFAULT_IGNORE_DIRS } from '../../src/server/workspace.js'
+import { createFsIntentInvalidator } from '../../src/index.js'
 
 async function makeTree(label: string): Promise<string> {
   const root = path.join(os.tmpdir(), `filehub-idx-${label}-${process.pid.toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
@@ -272,5 +273,36 @@ describe('workspace indexer', () => {
     } finally {
       indexer.dispose()
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// B02: fs/write-intent and fs/edit-intent are host WATERFALL events — a
+// listener that never calls next() vetoes every later listener in the chain
+// (host observation guards, the str-replace editor). FileHub's listener must
+// invalidate AND yield next(), forwarding the eventual intent untouched.
+// ---------------------------------------------------------------------------
+
+describe('fs-intent invalidation listener (B02)', () => {
+  it('invalidates the index and forwards the waterfall next() result', () => {
+    let invalidated = 0
+    const listener = createFsIntentInvalidator({ invalidateAll: () => { invalidated += 1 } })
+    const intent = { version: 'v-test' }
+    const result = listener({ targetKey: 'tk', displayPath: 'p.txt' }, undefined, () => intent)
+    expect(invalidated).toBe(1)
+    expect(result).toBe(intent)
+  })
+
+  it('forwards an async next() intent promise untouched', async () => {
+    const listener = createFsIntentInvalidator({ invalidateAll: () => undefined })
+    const result = await listener({}, undefined, () => Promise.resolve({ version: 'async' }))
+    expect(result).toEqual({ version: 'async' })
+  })
+
+  it('still invalidates when next() yields undefined (unconditional host write)', () => {
+    let invalidated = 0
+    const listener = createFsIntentInvalidator({ invalidateAll: () => { invalidated += 1 } })
+    expect(listener({}, undefined, () => undefined)).toBeUndefined()
+    expect(invalidated).toBe(1)
   })
 })

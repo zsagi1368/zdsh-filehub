@@ -297,6 +297,25 @@ export interface FileHubDomain {
 }
 
 /**
+ * B02: build the `fs/write-intent` / `fs/edit-intent` invalidation listener.
+ * Both host events are WATERFALL decisions: a listener that does not call
+ * `next()` vetoes every later listener in the chain (host observation
+ * guards, the str-replace editor). FileHub only marks its mention index
+ * stale — it never owns the decision slot — so it invalidates and then
+ * yields `next()`, forwarding the eventual intent. Exported for unit tests.
+ * @param indexer - the workspace index to invalidate on host write/edit intents.
+ * @returns a waterfall-safe listener matching HostEventsLike's loose face.
+ */
+export function createFsIntentInvalidator(
+  indexer: Pick<WorkspaceIndexer, 'invalidateAll'>,
+): (target: unknown, actor: unknown, next: unknown) => unknown {
+  return (_target: unknown, _actor: unknown, next: unknown): unknown => {
+    indexer.invalidateAll()
+    return (next as () => unknown)()
+  }
+}
+
+/**
  * Compose the M1 upload domain onto a host context. Exported separately from
  * {@link apply} so tests can drive the real handlers against fake services.
  *
@@ -324,17 +343,22 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
     ttlMs: resolved.mention.indexTtlMs,
   })
   // Event-driven invalidation (FR-B2). Verified event names and payload shape:
-  // `fs/write-intent` / `fs/edit-intent` are waterfall events carrying
-  // (target: FsTarget {targetKey, displayPath}, actor) — see
+  // `fs/write-intent` / `fs/edit-intent` are WATERFALL events carrying
+  // (target: FsTarget {targetKey, displayPath}, actor, next) — see
   // Fork/packages/fs/fs-observation-policy/src/index.ts:119-122 and
   // Fork/packages/fs/fs/src/types.ts:60-68. They fire on TOOL-mediated writes
   // only; edits made outside the tool pipeline surface through the TTL
   // fallback inside createWorkspaceIndexer instead.
+  // B02 FIX: a waterfall listener that never calls `next()` VETOES every
+  // later listener in the chain (host fs-observation-policy guards, the
+  // str-replace editor). FileHub only signals itself index-invalidated here
+  // and owns no decision slot, so it must yield the decision to `next()`.
   const eventDisposers: Array<() => void> = []
   if (ctx.events !== undefined) {
+    const invalidate = createFsIntentInvalidator(indexer)
     for (const eventName of ['fs/write-intent', 'fs/edit-intent'] as const) {
       try {
-        eventDisposers.push(ctx.events.on(eventName, () =>{  indexer.invalidateAll() }))
+        eventDisposers.push(ctx.events.on(eventName, invalidate))
       } catch (error: unknown) {
         logWarn(`[filehub] could not subscribe ${eventName}: ${String(error)}`)
       }

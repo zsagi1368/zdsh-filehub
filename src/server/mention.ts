@@ -298,14 +298,23 @@ export function createMentionInjector(deps: MentionInjectorDeps): MentionInjecto
         'agent/pre-step',
         async (payload: unknown, next: unknown): Promise<unknown> => {
           const { agent, signal } = payload as { agent?: MentionAgentLike; signal?: AbortSignal }
-          type StepDecision = { kind: 'reject' } | { kind: 'enter'; messages: unknown[] }
+          // B03: the host PreStepDecision enter branch carries an optional
+          // `startsRequestSeries?: true` (packages/core/agent runtime-types
+          // .d.ts, "start a distinct model-message series before this step's
+          // admitted messages"). Re-wrapping without forwarding the bit
+          // silently swallows a co-located plugin's series boundary.
+          type StepDecision = { kind: 'reject' } | { kind: 'enter'; messages: unknown[]; startsRequestSeries?: true }
           const nextFn = next as () => Promise<{ kind: string; messages?: unknown[] }> | { kind: string; messages?: unknown[] }
           const decision = (await nextFn()) as StepDecision
           if (decision.kind !== 'enter' || !Array.isArray(decision.messages)) return decision
           const cwd = agent?.session?.header?.cwd
           if (typeof cwd !== 'string' || cwd === '' || signal?.aborted === true) return decision
           const messages = await injectReferences(decision.messages, cwd, signal ?? new AbortController().signal)
-          return { kind: 'enter', messages }
+          return {
+            kind: 'enter',
+            messages,
+            ...(decision.startsRequestSeries === true ? { startsRequestSeries: true } : {}),
+          }
         },
       )
     },

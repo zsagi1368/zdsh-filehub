@@ -262,6 +262,36 @@ describe('mention injector (agent/pre-step seam)', () => {
     expect(events.registrations).toHaveLength(0)
   })
 
+  it('B03: re-wrapped enter decisions forward startsRequestSeries from the host chain', async () => {
+    const cwd = await makeWorkspace('series')
+    workspaceRoots.push(cwd)
+    await fsp.writeFile(path.join(cwd, 'note.md'), 'x')
+
+    const injector = createMentionInjector({ logWarn: () => undefined })
+    const events = makeEvents()
+    injector.attach(events)
+    const registration = events.registrations.find(entry => entry.event === 'agent/pre-step')
+    expect(registration).toBeDefined()
+    const payload = { agent: fakeAgent(cwd), signal: new AbortController().signal }
+    const message = userMessage('look @note.md')
+
+    // Bit set downstream → must survive our re-wrap (host PreStepDecision
+    // enter carries optional `startsRequestSeries?: true`).
+    const withSeries = (await registration?.listener(payload, () => ({
+      kind: 'enter', messages: [message], startsRequestSeries: true as const,
+    }))) as { kind: string; messages?: unknown[]; startsRequestSeries?: true }
+    expect(withSeries.kind).toBe('enter')
+    expect(withSeries.startsRequestSeries).toBe(true)
+    // Injection actually happened (we are on the re-wrap path, not a passthrough).
+    expect(JSON.stringify(withSeries.messages)).toContain('workspace-reference')
+
+    // Bit absent downstream → key must NOT be fabricated, even on re-wrap.
+    const withoutSeries = (await registration?.listener(payload, () => ({
+      kind: 'enter', messages: [userMessage('look @note.md')],
+    }))) as { kind: string; startsRequestSeries?: true }
+    expect(Object.hasOwn(withoutSeries, 'startsRequestSeries')).toBe(false)
+  })
+
   function warnCount(_originalText: unknown, _block: { text?: string }): number {
     return ((_block.text ?? '').match(/<workspace-reference /gu) ?? []).length
   }
