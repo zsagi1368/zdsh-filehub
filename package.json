@@ -1,5 +1,5 @@
 {
-  "name": "zdsh-filehub",
+  "name": "dsh-filehub",
   "version": "0.1.0",
   "description": "zDSH FileHub - unified file center plugin for DeepSeek Harness: universal uploads (picker/drag/paste/folder), @file mentions with existence-checked structured references, budgeted document reading (text/PDF/DOCX/XLSX), privacy-first image captioning waterfall, and a cross-session file console.",
   "keywords": [
@@ -39,7 +39,7 @@
       {
         "type": "service",
         "service": {
-          "name": "zdsh-filehub/server",
+          "name": "dsh-filehub/server",
           "factory": "./lib/index.js",
           "singleton": true
         }
