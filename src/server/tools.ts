@@ -2,8 +2,25 @@
  * M3 AI document-reading tools (P01 §6-C FR-C5..C8): `read_document`,
  * `list_workspace_files`, and their system-prompt guidance.
  *
- * EMPIRICAL CONTRACT (clean-room notes — every field below was verified
- * against the Fork sources before being written here; nothing invented):
+ * TC-B3-31A B01 CORRECTION (2026-09-16): the earlier "accepts them unchanged"
+ * claim below was FALSE. `ctx.tools.register` validates `output.schema`
+ * against the ENFORCED RAW JSON Schema subset at runtime
+ * (`assertSupportedJsonSchema`, packages/core/tools/src/json-schema.ts:87,385)
+ * — an author-DSL `type:'json'` node or a per-property `required: true`
+ * annotation makes registration THROW before the tool is ever callable
+ * (verified against the real host: rc.1 and rc.2 register bodies are
+ * identical on this point; FileHub's tool registration had only ever passed
+ * a non-validating fake registry). These two definitions are now authored in
+ * the exact shape the host's own `defineTool` compiles author specs INTO
+ * (parameterSchemaSpecToJsonSchema / valueSchemaSpecToJsonSchema outputs):
+ * object-rooted `parameters`, `required` as an array of property names at
+ * each OBJECT node only, and unconstrained values as annotation-only nodes.
+ * A sandbox probe pins this equivalence against the real compiled output
+ * (campaign sandbox-b3-31); the unit registry replica runs the same
+ * assertion as the host.
+ *
+ * ORIGINAL CLEAN-ROOM NOTES (field names still accurate; the schema-value
+ * FORM of parameters/output was not — see correction above):
  *
  * - Tool option fields — `packages/core/tools/lib/types/schema.d.ts`
  *   (`DefineToolOptions`): name / description / parameters /
@@ -32,8 +49,10 @@
  * the peer packages: package.json marks every @deepseek-ai dependency optional
  * (peerDependenciesMeta) and M0/M1 guarantee the plugin loads on a bare
  * context, degrading loudly when a service is absent. The registered objects
- * are field-for-field the shapes above, so a host composing the real
- * `ctx.tools.register` / `ctx.systemPrompt.section` accepts them unchanged.
+ * are field-for-field the shapes above IN THEIR RAW-COMPILED FORM (see the
+ * B01 correction), so a host composing the real `ctx.tools.register` /
+ * `ctx.systemPrompt.section` accepts them unchanged — this time verified
+ * against the real validator, not just the field roster.
  */
 
 import fsp from 'node:fs/promises'
@@ -65,14 +84,18 @@ export interface TextBlock {
 }
 
 /**
- * Mirror of `DefineToolOptions` (see header note). Loose generics on purpose:
- * argument validation is performed by the HOST's defineTool/validateArgs;
- * this side narrows defensively after casting.
+ * Mirror of the host's COMPILED `ToolDefinition` (see header note). After
+ * the B01 fix this carries the raw post-compilation shapes the host registry
+ * accepts: `parameters` is an object-rooted raw JSON Schema (what
+ * `parameterSchemaSpecToJsonSchema` emits) and `output.schema` is a raw node
+ * from the enforced subset (what `valueSchemaSpecToJsonSchema` emits). Loose
+ * generics on purpose: argument validation is performed by the HOST against
+ * these raw schemas; this side narrows defensively after casting.
  */
 export interface FilehubToolDefinition {
   readonly name: string
   readonly description: string
-  readonly parameters: Record<string, Record<string, unknown>>
+  readonly parameters: Record<string, unknown>
   readonly output: {
     readonly schema: Record<string, unknown>
     render(args: unknown, value: JsonValue): TextBlock[]
@@ -112,7 +135,14 @@ export interface ToolResultLike {
   meta?: JsonValue
 }
 
-/** Identity helper shaped exactly like the host's defineTool usage. */
+/**
+ * Identity tagging helper: the definitions below are ALREADY authored in the
+ * host-COMPILED (raw) form, so this performs NO schema compilation — unlike
+ * the host's `defineTool`, which would compile author-DSL specs. Do not feed
+ * it author-DSL shapes (per-property `required: true`, `type:'json'`): the
+ * host's register-time `assertSupportedJsonSchema(output.schema)` rejects
+ * those (that mismatch was defect B01).
+ */
 export function defineTool(definition: FilehubToolDefinition): FilehubToolDefinition {
   return definition
 }
@@ -377,23 +407,9 @@ export function registerReadingTools(
   const cache = deps.cache ?? new ParseCache()
   const logWarn = deps.logWarn ?? ((): void => {})
 
-  // ---- system-prompt guidance (order 110; read's own section sits at 100) --
-  disposers.push(
-    deps.systemPrompt.section({
-      name: 'filehub-document-reading',
-      order: 110,
-      text: [
-        'Documents uploaded through FileHub live in the session workspace and are read with the read_document tool.',
-        'Workflow: run list_workspace_files when unsure what exists; call read_document with probe: true FIRST to see structure',
-        '(pdf pages, xlsx sheet names with row/column counts, docx paragraphs, text length), then read bodies in windows.',
-        'When a result ends with "[truncated at char N of total M — call again with offset=N]", continue with offset=N.',
-        'Do not repeat a window you already read. For spreadsheets select one sheet per call:',
-        'sheet: "Exact Sheet Name" or sheet: <1-based index>; probe lists the available names first.',
-        'Text results carry up to ~8000 characters, spreadsheets ~6000, pdf/docx ~4000 — plan multi-pass reads for long documents.',
-        'Paths outside the session upload workspace are rejected.',
-      ].join(' '),
-    }),
-  )
+  // B01 ordering fix: the prompt section registers LAST, after both tools.
+  // A tool-registration throw then can never leave the guidance section
+  // dangling with no tools behind it (the old head-first order did).
 
   // ---- read_document --------------------------------------------------------
   disposers.push(
@@ -404,31 +420,36 @@ export function registerReadingTools(
           'Read a document uploaded into the session workspace: plain text (utf-8/utf-16/gb18030), PDF, DOCX or XLSX. ' +
           'Use probe: true to inspect structure first; read bodies in windows guided by the truncation marker.',
         parameters: {
-          path: { type: 'string', required: true, description: 'File path inside the session upload workspace (absolute, or relative to the workspace root).' },
-          offset: { type: 'integer', description: '0-based character offset to start reading from. Defaults to 0.' },
-          limit: { type: 'integer', description: 'Maximum characters to return; clamped to the per-format budget.' },
-          sheet: {
-            oneOf: [{ type: 'string' }, { type: 'integer' }],
-            description: 'xlsx only: worksheet selector — exact sheet name (recommended) or 1-based index. Omit for the first sheet.',
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path inside the session upload workspace (absolute, or relative to the workspace root).' },
+            offset: { type: 'integer', description: '0-based character offset to start reading from. Defaults to 0.' },
+            limit: { type: 'integer', description: 'Maximum characters to return; clamped to the per-format budget.' },
+            sheet: {
+              oneOf: [{ type: 'string' }, { type: 'integer' }],
+              description: 'xlsx only: worksheet selector — exact sheet name (recommended) or 1-based index. Omit for the first sheet.',
+            },
+            probe: { type: 'boolean', description: 'Return the structure overview (pages/sheets/paragraphs/length) WITHOUT dumping the body. Default false.' },
           },
-          probe: { type: 'boolean', description: 'Return the structure overview (pages/sheets/paragraphs/length) WITHOUT dumping the body. Default false.' },
+          required: ['path'],
         },
         output: {
           schema: {
             type: 'object',
             additionalProperties: false,
             properties: {
-              path: { type: 'string', required: true },
-              format: { type: 'string', required: true },
-              probe: { type: 'boolean', required: true },
-              offset: { type: 'integer', required: true },
-              returnedChars: { type: 'integer', required: true },
-              totalChars: { type: 'integer', required: true },
-              truncated: { type: 'boolean', required: true },
+              path: { type: 'string' },
+              format: { type: 'string' },
+              probe: { type: 'boolean' },
+              offset: { type: 'integer' },
+              returnedChars: { type: 'integer' },
+              totalChars: { type: 'integer' },
+              truncated: { type: 'boolean' },
               text: { type: 'string', description: 'The extracted window; omitted for probe calls.' },
-              overview: { type: 'json', description: 'Structure overview; present for probe calls (and compact facts otherwise).' },
+              overview: { description: 'Structure overview; present for probe calls (and compact facts otherwise).' },
               continuationHint: { type: 'string', description: 'Present when truncated: the exact follow-up call to make.' },
             },
+            required: ['path', 'format', 'probe', 'offset', 'returnedChars', 'totalChars', 'truncated'],
           },
           render: (_args, rawValue) => {
             const v = rawValue as unknown as {
@@ -596,7 +617,7 @@ export function registerReadingTools(
         name: 'list_workspace_files',
         description:
           'List the files in the current session\'s upload workspace (bounded to 500 entries with an explicit truncated flag).',
-        parameters: {},
+        parameters: { type: 'object', properties: {} },
         output: {
           schema: {
             type: 'object',
@@ -604,20 +625,21 @@ export function registerReadingTools(
             properties: {
               entries: {
                 type: 'array',
-                required: true,
                 items: {
                   type: 'object',
                   additionalProperties: false,
                   properties: {
-                    path: { type: 'string', required: true },
-                    kind: { type: 'string', required: true },
-                    sizeBytes: { type: 'integer', required: true },
+                    path: { type: 'string' },
+                    kind: { type: 'string' },
+                    sizeBytes: { type: 'integer' },
                   },
+                  required: ['path', 'kind', 'sizeBytes'],
                 },
               },
-              truncated: { type: 'boolean', required: true },
-              total: { type: 'integer', required: true },
+              truncated: { type: 'boolean' },
+              total: { type: 'integer' },
             },
+            required: ['entries', 'truncated', 'total'],
           },
           render: (_args, value) => {
             const v = value as { entries: Array<{ path: string; kind: string; sizeBytes: number }>; truncated: boolean; total: number }
@@ -697,6 +719,24 @@ export function registerReadingTools(
         },
       }),
     ),
+  )
+
+  // ---- system-prompt guidance (B01: registered LAST, order 110; read's own section sits at 100)
+  disposers.push(
+    deps.systemPrompt.section({
+      name: 'filehub-document-reading',
+      order: 110,
+      text: [
+        'Documents uploaded through FileHub live in the session workspace and are read with the read_document tool.',
+        'Workflow: run list_workspace_files when unsure what exists; call read_document with probe: true FIRST to see structure',
+        '(pdf pages, xlsx sheet names with row/column counts, docx paragraphs, text length), then read bodies in windows.',
+        'When a result ends with "[truncated at char N of total M — call again with offset=N]", continue with offset=N.',
+        'Do not repeat a window you already read. For spreadsheets select one sheet per call:',
+        'sheet: "Exact Sheet Name" or sheet: <1-based index>; probe lists the available names first.',
+        'Text results carry up to ~8000 characters, spreadsheets ~6000, pdf/docx ~4000 — plan multi-pass reads for long documents.',
+        'Paths outside the session upload workspace are rejected.',
+      ].join(' '),
+    }),
   )
 
   return disposers
