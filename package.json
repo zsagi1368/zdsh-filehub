@@ -33,6 +33,79 @@
     "LICENSE"
   ],
   "dsh": {
+    "compatible": ">=0.1.5-rc.2 <0.2.0",
+    "autoApprove": true,
+    "capabilities": [
+      {
+        "type": "service",
+        "service": {
+          "name": "zdsh-filehub/server",
+          "factory": "./lib/index.js",
+          "singleton": true
+        }
+      },
+      {
+        "type": "tool",
+        "tool": {
+          "name": "read_document",
+          "description": "Read a document uploaded into the session workspace: plain text (utf-8/utf16/gb18030), PDF, DOCX or XLSX. Use probe to inspect structure first; read bodies in windows guided by the truncation marker.",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "description": "File path inside the session upload workspace (absolute, or relative to the workspace root)." },
+              "offset": { "type": "integer", "description": "0-based character offset to start reading from. Defaults to 0." },
+              "limit": { "type": "integer", "description": "Maximum characters to return; clamped to the per-format budget." },
+              "sheet": { "oneOf": [{ "type": "string" }, { "type": "integer" }], "description": "xlsx only: worksheet selector — exact sheet name or 1-based index. Omit for the first sheet." },
+              "probe": { "type": "boolean", "description": "Return the structure overview WITHOUT dumping the body. Default false." }
+            },
+            "required": ["path"]
+          },
+          "timeoutMs": 120000
+        }
+      },
+      {
+        "type": "tool",
+        "tool": {
+          "name": "list_workspace_files",
+          "description": "List the files in the current session's upload workspace (bounded to 500 entries with an explicit truncated flag).",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "timeoutMs": 120000
+        }
+      }
+    ],
+    "sandbox": {
+      "type": "inline",
+      "resources": {
+        "memoryLimitMb": 512,
+        "cpuLimit": 50,
+        "timeoutMs": 120000,
+        "maxOutputBytes": 1000000
+      },
+      "filesystem": {
+        "access": "readwrite",
+        "allowedPaths": [],
+        "deniedPatterns": []
+      },
+      "network": {
+        "access": "external",
+        "allowedHosts": [],
+        "deniedHosts": [],
+        "allowLocal": true
+      },
+      "environment": {
+        "whitelist": [],
+        "blacklist": [],
+        "clear": false
+      },
+      "process": {
+        "spawn": false,
+        "exec": false,
+        "allowedCommands": []
+      }
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
@@ -61,35 +134,19 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-agent": "*",
-    "@deepseek-ai/dsh-api-remotes": "*",
-    "@deepseek-ai/dsh-client-connection": "*",
     "@deepseek-ai/dsh-client-locale": "*",
     "@deepseek-ai/dsh-client-ui-conversation": "*",
     "@deepseek-ai/dsh-client-ui-input-trigger": "*",
     "@deepseek-ai/dsh-client-ui-settings": "*",
     "@deepseek-ai/dsh-client-ui-slots": "*",
-    "@deepseek-ai/dsh-fs": "*",
     "@deepseek-ai/dsh-llm": "*",
-    "@deepseek-ai/dsh-settings": "*",
     "@deepseek-ai/dsh-storage": "*",
     "@deepseek-ai/dsh-tools": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*",
-    "@deepseek-ai/dsh-typert-registry": "*",
     "@deepseek-ai/schemastery": "*",
     "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-agent": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-api-remotes": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-connection": {
       "optional": true
     },
     "@deepseek-ai/dsh-client-locale": {
@@ -107,25 +164,13 @@
     "@deepseek-ai/dsh-client-ui-slots": {
       "optional": true
     },
-    "@deepseek-ai/dsh-fs": {
-      "optional": true
-    },
     "@deepseek-ai/dsh-llm": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-settings": {
       "optional": true
     },
     "@deepseek-ai/dsh-storage": {
       "optional": true
     },
     "@deepseek-ai/dsh-tools": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-typert-protocol": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-typert-registry": {
       "optional": true
     },
     "@deepseek-ai/schemastery": {
@@ -137,22 +182,15 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-api-remotes": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-connection": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-locale": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-conversation": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-renderer": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-settings": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-fs": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-llm": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-settings": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-storage": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-tools": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-typert-protocol": "=0.1.2-rc.1",
-    "@deepseek-ai/dsh-typert-registry": "=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-input-trigger": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-storage": "=0.1.5-rc.2",
+    "@deepseek-ai/dsh-tools": "=0.1.5-rc.2",
     "@deepseek-ai/schemastery": "^3.18.0",
     "@types/node": "^24.0.0",
     "@types/react": "^18.2.0",
