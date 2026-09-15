@@ -1,5 +1,13 @@
 node_modules/
-lib/
+# Prebuilt artifacts are committed (TC-B3-31C / DESIGN §8-P-9 Option A): the two
+# runtime bundles lib/index.js + lib/client.js are tracked so a git+pin snapshot
+# carries build output (offline first-boot, A-1.1.1). Source maps stay excluded —
+# not needed at runtime, and the old index.js.map (~5 MB) was the release-size
+# offender (contract-filehub §5 P05). `lib/*` (not `lib/`) so the negations below
+# can re-include files inside the directory.
+lib/*
+!lib/index.js
+!lib/client.js
 coverage/
 *.tsbuildinfo
 .DS_Store
