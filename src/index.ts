@@ -276,9 +276,33 @@ export interface HostContext {
    * and the caption waterfall runs.
    */
   readonly llm?: LlmRuntimeFaceLike
+  /**
+   * The host cordis service reader (`ctx.get(name)`), which returns a service
+   * WITHOUT the `inject` requirement (see @deepseek-ai/cordis reflect.ts `get`:
+   * "Read a service from the store without the inject requirement"; undefined
+   * when the host never provides it). FileHub reads the OPTIONAL `llm` face
+   * through this seam instead of `ctx.llm`: a real cordis context proxy THROWS
+   * `cannot get property "llm" without inject` for any property absent from
+   * {@link inject} (reflect.ts get trap), so touching `ctx.llm` — which is
+   * deliberately NOT in `inject` — would abort the whole mount (RA1b defect).
+   * Optional: plain-object contexts (unit tests, bare hosts) carry no `get`,
+   * where `ctx.llm` is already a safe optional property access.
+   */
+  readonly get?: (name: string, strict?: boolean) => unknown
 }
 
-/** Host services required by the full feature set (finalized per domain). */
+/**
+ * Host services required by the full feature set (finalized per domain).
+ *
+ * `llm` is DELIBERATELY absent: it is an optional capability (HostContext.llm)
+ * whose absence degrades the vision route gate to the always-waterfall path,
+ * never the whole plugin. Adding it here would turn it into a hard mount
+ * dependency (cordis keeps the fiber INACTIVE until every injected service
+ * resolves) and break the documented optional-degrade contract. The mount-time
+ * read of llm goes through the guarded `ctx.get('llm')` seam in
+ * createFileHubDomain instead. tests/server/llm-inject-contract.client.spec.ts
+ * locks this invariant against the createImageCapableGate consumption point.
+ */
 export const inject = [
   'fs',
   'sessions',
@@ -461,11 +485,21 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
   // Route gate first (FR-D1): a natively vision-capable session model keeps
   // the waterfall dormant. Mode/privacy toggles read the live settings center;
   // captions cache into their own KV unit keyed by sha256+channel.
+  //
+  // llm is OPTIONAL and intentionally NOT in `inject` (see HostContext.llm and
+  // the RA1c note on the get seam). Read it through ctx.get when the host is a
+  // real cordis context — the property `ctx.llm` throws `... without inject`
+  // there — so an absent llm degrades to undefined (waterfall runs) instead of
+  // aborting the mount. Plain-object contexts (unit tests / bare hosts) have no
+  // `get` seam and already read `ctx.llm` safely.
+  const llmFace = (
+    typeof ctx.get === 'function' ? ctx.get('llm') : ctx.llm
+  ) as LlmRuntimeFaceLike | undefined
   const visionService: VisionService = createVisionService({
     logWarn,
     storage: ctx.storage,
     resolveImageCapable: createImageCapableGate({
-      llm: ctx.llm,
+      llm: llmFace,
       nativeRoute: resolved.vision.nativeRoute,
       logWarn,
     }),
