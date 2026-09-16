@@ -16,6 +16,10 @@
     "vision"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zsagi1368/zdsh-filehub.git"
+  },
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
