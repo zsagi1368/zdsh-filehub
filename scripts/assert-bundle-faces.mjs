@@ -17,9 +17,11 @@
  *           rewrites it, xlsx reading breaks at runtime. Assert the specifier
  *           string survives verbatim and that read-excel-file was NOT bundled in.
  *  FACE 3 — ModuleLoader CJS banner (§2 C5 / build.mjs:45-49): the handshake
- *           literal `window.__ModuleLoader__.load({ id: 'filehub', ... })` at the
- *           head and the `return module.exports; } });` tail must be intact
- *           (esbuild banners/footers are not minified).
+ *           literal `window.__ModuleLoader__.load({ id: 'dsh-filehub', ... })`
+ *           at the head and the `return module.exports; } });` tail must be
+ *           intact (esbuild banners/footers are not minified). The id tracks the
+ *           α-renamed package name `dsh-filehub` (main-repo loader reconciles
+ *           the boot graph by package name — see build.mjs banner comment).
  *
  * Also asserts the sourcemap slimming took effect: no lib/*.map emitted and no
  * dangling `sourceMappingURL` comment left behind (P05 release-size offender).
@@ -67,7 +69,7 @@ check(
 )
 
 // ---- FACE 3: ModuleLoader CJS banner / footer handshake shape -----------------
-const bannerHead = "window.__ModuleLoader__.load({ id: 'filehub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;"
+const bannerHead = "window.__ModuleLoader__.load({ id: 'dsh-filehub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;"
 const footerTail = 'return module.exports; } });'
 check('face3.banner-head', clientJs.startsWith(bannerHead), 'client.js must open with the ModuleLoader banner')
 check('face3.footer-tail', clientJs.trimEnd().endsWith(footerTail), 'client.js must close with the module.exports footer')

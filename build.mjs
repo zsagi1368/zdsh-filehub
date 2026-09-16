@@ -59,7 +59,13 @@ await build({
     'scheduler',
   ],
   banner: {
-    js: "window.__ModuleLoader__.load({ id: 'filehub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;",
+    // Handshake module id must === package.json name (main-repo client loader
+    // reconciles the boot graph row by package name and throws when the bundle
+    // registers a different id — see tsdown.client.ts @param id and
+    // client/modules/src/client/system.ts:135). Kept in lockstep with the α
+    // rename `zdsh-filehub -> dsh-filehub` (HEAD). Do NOT drift back to the
+    // old bare `'filehub'`.
+    js: "window.__ModuleLoader__.load({ id: 'dsh-filehub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;",
   },
   footer: {
     js: 'return module.exports; } });',
