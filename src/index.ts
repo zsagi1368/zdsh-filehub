@@ -289,6 +289,27 @@ export interface HostContext {
    * where `ctx.llm` is already a safe optional property access.
    */
   readonly get?: (name: string, strict?: boolean) => unknown
+  /**
+   * The host cordis fiber effect face (`ctx.effect(setup, label?)`): `setup`
+   * runs IMMEDIATELY and its return value is the disposer collected for fiber
+   * unload (lib/types/fiber.d.ts `effect(execute: () => SyncEffect, label?)`).
+   * RA1d: apply wires `domain.dispose` through this seam because the cordis
+   * constructor path (fiber.ts isConstructor → `new callback`) drops the
+   * returned domain object — only `instance[symbols.init]` is collected — so a
+   * returned `{dispose}` handle is never executed on unload. Optional:
+   * plain-object contexts (unit tests, bare hosts) carry no `effect`, where
+   * callers own disposal through the returned handle as before.
+   *
+   * The setup return mirrors cordis `SyncEffect` (a disposer, or an iterable
+   * of disposers) — NOT `(() => void) | void`: a real cordis Context must stay
+   * assignable to HostContext (parameter contravariance at every
+   * `root.plugin({inject, apply})` call site), and `void` fails that check in
+   * both variance directions against `() => SyncEffect`.
+   */
+  readonly effect?: (
+    setup: () => (() => void) | Iterable<() => void>,
+    label?: string,
+  ) => unknown
 }
 
 /**
@@ -343,9 +364,10 @@ export function createFsIntentInvalidator(
  * Compose the M1 upload domain onto a host context. Exported separately from
  * {@link apply} so tests can drive the real handlers against fake services.
  *
- * TODO(integration): wrap route registration + the sweeper timer in
- * `ctx.effect(...)` once the loader contract for plugin-provided disposers is
- * pinned down; for now callers own disposal through the returned handle.
+ * Disposal contract (RA1d): the returned handle stays caller-owned here —
+ * direct-call consumers (tests, bare hosts) call `dispose()` themselves. The
+ * fiber-unload path is wired in {@link apply} through `ctx.effect`, because the
+ * cordis constructor path drops this function's return value entirely.
  */
 export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHubConfig>): FileHubDomain {
   const resolved = resolveConfig(overrides)
@@ -676,5 +698,21 @@ export function createFileHubDomain(ctx: HostContext, overrides?: Partial<FileHu
 export function apply(ctx: HostContext, config?: Partial<FileHubConfig>): FileHubDomain {
   const resolved = resolveConfig(config)
   ctx.logger.info(`[filehub] ready (storageDirName=${resolved.storageDirName})`)
-  return createFileHubDomain(ctx, config)
+  const domain = createFileHubDomain(ctx, config)
+  // RA1d: the cordis constructor path (fiber.ts:251-257 — apply is a named
+  // function, so isConstructor=true → `new callback(ctx, config)`) collects
+  // only instance[symbols.init] and DROPS the returned domain object, so
+  // domain.dispose would never run on fiber unload (route leak, duplicate
+  // prefix on remount, sweep timer leak). Wire the disposal through the fiber
+  // effect contract instead (verticals cordis.ts:96 precedent): `setup` runs
+  // immediately and its RETURN VALUE is the unload disposer — passing
+  // `() => domain.dispose` would call dispose at mount time. Guarded like the
+  // llm seam: plain-object hosts (unit tests) have no effect() and keep owning
+  // disposal through the returned handle. dispose is idempotent (FileHubDomain
+  // contract), so an explicit caller-side dispose plus the effect disposer
+  // double-running is safe.
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => () => domain.dispose(), 'filehub-domain')
+  }
+  return domain
 }
