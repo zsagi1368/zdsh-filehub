@@ -11,3 +11,19 @@ dedupePeerDependents: true
 # (pnpm 11 strict-dep-builds syntax, same key as the Fork workspace).
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/dsh-brand@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-locale@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-ui-conversation@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-ui-input-trigger@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-ui-renderer@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-ui-settings@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-client-ui-slots@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-llm@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-storage@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-timeout@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-tools@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-typert-protocol@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-util-crypto@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-util-values@0.2.0-rc.2'
