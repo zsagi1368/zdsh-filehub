@@ -2,7 +2,7 @@
 #
 # Host-provided packages (@deepseek-ai/*) are declared as OPTIONAL PEERS and
 # resolved by the host at runtime; development types come from registry-pinned
-# devDependencies (=0.2.0-rc.2, aligned to the zDSH baseline).
+# devDependencies (=0.2.1-alpha.2, aligned to the zDSH baseline).
 # pnpm 11 reads its settings from this file (.npmrc keys are ignored).
 autoInstallPeers: false
 dedupePeerDependents: true
@@ -13,17 +13,17 @@ allowBuilds:
   esbuild: true
 
 minimumReleaseAgeExclude:
-  - '@deepseek-ai/dsh-brand@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-locale@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-ui-conversation@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-ui-input-trigger@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-ui-renderer@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-ui-settings@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-client-ui-slots@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-llm@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-storage@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-timeout@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-tools@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-typert-protocol@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-util-crypto@0.2.0-rc.2'
-  - '@deepseek-ai/dsh-util-values@0.2.0-rc.2'
+  - '@deepseek-ai/dsh-brand@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-locale@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-ui-conversation@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-ui-input-trigger@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-ui-renderer@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-ui-settings@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-client-ui-slots@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-llm@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-storage@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-timeout@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-tools@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-typert-protocol@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-util-crypto@0.2.1-alpha.2'
+  - '@deepseek-ai/dsh-util-values@0.2.1-alpha.2'
