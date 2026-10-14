@@ -39,14 +39,15 @@ import { FileConsoleView } from './console/FileConsoleView.js'
 import { FileHubSettingsPanel } from './settings/FileHubSettingsPanel.js'
 import { bindHostLocale, t } from './i18n.js'
 
-/** Client bundles this plugin requires the host to provide first. */
-const inject = [
-  '@deepseek-ai/dsh-client-ui-conversation',
-  '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-ui-input-trigger',
-  '@deepseek-ai/dsh-client-ui-settings',
-  '@deepseek-ai/dsh-client-locale',
-]
+/**
+ * Client-side cordis services this half reads at runtime. `slots` is the
+ * registration backbone every entry below rides on. The client bundles this
+ * plugin needs the host to provide FIRST are not services: they are the
+ * arrival edges in package.json's `dsh.client.inject` (module ordering). Listing
+ * those package ids here made the fiber wait for services that never exist, so
+ * the entry stayed pending forever instead of activating.
+ */
+const inject = ['slots']
 
 /** Registrant inject face shared by both slot entries. */
 interface FileHubInjectFace {
@@ -71,9 +72,17 @@ function apply(ctx: ClientContext): void {
   // M5 language signal: follow the host locale when the composition ships
   // dsh-client-locale (guarded structural probe — a bare context keeps the
   // navigator-derived default; see src/client/i18n.ts header for evidence).
-  bindHostLocale(
-    (ctx as { locale?: Parameters<typeof bindHostLocale>[0] }).locale,
-  )
+  // The probe goes through ctx.get, the same idiom registerMentionTrigger uses
+  // for inputTriggers: a property read would throw on a runtime fiber whose
+  // composition lacks the service, and declaring `locale` in `inject` would
+  // instead keep this fiber inactive forever in exactly that composition.
+  let hostLocale: Parameters<typeof bindHostLocale>[0]
+  try {
+    hostLocale = (ctx as unknown as { get(name: string): unknown }).get('locale') as typeof hostLocale
+  } catch {
+    hostLocale = undefined
+  }
+  bindHostLocale(hostLocale)
 
   // GLOBAL DISABLE COORDINATION (P01 §7, FR-E5): settings.enabled=false is the
   // single master switch. Degradation ownership per face:

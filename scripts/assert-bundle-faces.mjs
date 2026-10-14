@@ -5,12 +5,14 @@
  * if any load-bearing face of the bundle drifted — slimming (minify + dropping
  * sourcemaps) must NEVER silently break the runtime contract:
  *
- *  FACE 1 — client inject list (§2 C5/C1): the five host package names the CJS
- *           client bundle expects the host ModuleLoader to have provided must
- *           still appear as *string literals* in lib/client.js (they are names,
- *           not resolved imports — build.mjs externalises @deepseek-ai/*).
- *           Compared byte-for-byte against package.json dsh.client.inject so the
- *           manifest and the shipped bundle cannot diverge.
+ *  FACE 1 — the two inject faces (§2 C5/C1): `dsh.client.inject` (package.json)
+ *           lists the host PACKAGES the ModuleLoader must provide first — module
+ *           arrival edges. The CJS client bundle's exported `inject` is the cordis
+ *           SERVICE list the client half reads at runtime. Faces 1a/1b pin them
+ *           separately and 1c forbids the two from converging: carrying the
+ *           arrival list in the bundle made the fiber wait for services named
+ *           after packages (never provided), so the entry stayed pending forever
+ *           and the Web boot reported `dsh-filehub: pending`.
  *  FACE 2 — xlsx dynamic specifier (B04 / §3): `read-excel-file/node` is a
  *           DELIBERATE runtime `import()` (kept out of the static graph to dodge
  *           its unzipper -> optional @aws-sdk chain). If esbuild ever inlines or
@@ -37,19 +39,60 @@ const results = []
 const check = (name, pass, detail) => { results.push({ face: name, pass: !!pass, detail: detail ?? '' }) }
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
-const expectedInject = pkg.dsh?.client?.inject ?? []
 const clientJs = readFileSync(join(LIB, 'client.js'), 'utf8')
 const indexJs = readFileSync(join(LIB, 'index.js'), 'utf8')
 
-// ---- FACE 1: client inject list (string-literal face, manifest-cross-checked) --
+/**
+ * Read the exported cordis service-inject list out of the minified CJS bundle:
+ * the footer assigns `module.exports = { apply, inject }`, so follow the alias
+ * the assign carries back to its array literal. Returns undefined when the shape
+ * moved (the caller fails closed rather than passing on a stale assumption).
+ */
+function readServiceInject(source) {
+  const alias = source.match(/module\.exports\s*=\s*\{[^{}]*\binject\s*:\s*([A-Za-z_$][\w$]*)/)?.[1]
+  if (alias === undefined) return undefined
+  const literal = source.match(new RegExp(`(?:var|let|const)\\s+${alias}\\s*=\\s*(\\[[^\\]]*\\])`))?.[1]
+  if (literal === undefined) return undefined
+  try {
+    const parsed = JSON.parse(literal)
+    return Array.isArray(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// ---- FACE 1: the two inject faces, pinned separately --------------------------
+const expectedArrival = pkg.dsh?.client?.inject ?? []
 check(
-  'face1.inject-list.count',
-  expectedInject.length === 5,
-  `expected 5 host packages in dsh.client.inject, got ${expectedInject.length}`,
+  'face1a.arrival.count',
+  expectedArrival.length === 5,
+  `expected 5 host packages in dsh.client.inject, got ${expectedArrival.length}`,
 )
-for (const name of expectedInject) {
-  const occurrences = clientJs.split(name).length - 1
-  check(`face1.inject.${name}`, occurrences >= 1, `occurrences=${occurrences}`)
+for (const name of expectedArrival) {
+  check(`face1a.arrival.host-package.${name}`, name.startsWith('@deepseek-ai/dsh-'), `manifest entry ${name}`)
+}
+const serviceInject = readServiceInject(clientJs)
+check(
+  'face1b.service-inject.readable',
+  serviceInject !== undefined,
+  'the bundle must export an inject array (minified CJS module.exports = { apply, inject })',
+)
+if (serviceInject !== undefined) {
+  check(
+    'face1b.service-inject.service-names',
+    serviceInject.length > 0 && serviceInject.every((name) => typeof name === 'string' && !name.includes('/')),
+    `cordis SERVICE names expected here (no package ids): ${JSON.stringify(serviceInject)}`,
+  )
+  check(
+    'face1b.service-inject.slots',
+    serviceInject.includes('slots'),
+    `the slot-registration backbone this half rides on must be declared: ${JSON.stringify(serviceInject)}`,
+  )
+  check(
+    'face1c.faces-distinct',
+    JSON.stringify(serviceInject) !== JSON.stringify(expectedArrival),
+    'the bundle service inject must not be a copy of the manifest arrival list',
+  )
 }
 
 // ---- FACE 2: xlsx dynamic specifier preserved + read-excel-file NOT bundled ----
