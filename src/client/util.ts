@@ -62,23 +62,27 @@ export function normalizeRelativePath(input: string): string {
   return path.replace(/^\/+|\/+$/g, '')
 }
 
-let styleInjected = false
+/** Style tags already installed in this document, keyed by the tag id. */
+const injectedStyleIds = new Set<string>()
 
 /**
- * Install the plugin's scoped stylesheet once per document. All FileHub
- * classes carry the `zdsh-filehub-` prefix and live under element-scoped
- * selectors; no host-private class names are referenced (they are hash-named
- * and break across versions).
+ * Install one of the plugin's scoped stylesheets once per document. Each sheet
+ * carries its own tag id: a single module-level flag made the first caller (the
+ * composer upload entry) weld the gate shut and silently drop every later
+ * sheet, which left the settings panel unstyled — bare toggles, labels running
+ * into their descriptions — even though its CSS shipped in the bundle. All
+ * FileHub classes carry the `zdsh-filehub-` prefix and live under
+ * element-scoped selectors; no host-private class names are referenced (they
+ * are hash-named and break across versions).
  */
 export function injectStylesOnce(id: string, css: string): void {
-  if (styleInjected || typeof document === 'undefined') return
-  if (document.getElementById(id) !== null) {
-    styleInjected = true
-    return
+  if (typeof document === 'undefined') return
+  if (injectedStyleIds.has(id)) return
+  if (document.getElementById(id) === null) {
+    const tag = document.createElement('style')
+    tag.id = id
+    tag.textContent = css
+    document.head.appendChild(tag)
   }
-  const tag = document.createElement('style')
-  tag.id = id
-  tag.textContent = css
-  document.head.appendChild(tag)
-  styleInjected = true
+  injectedStyleIds.add(id)
 }
